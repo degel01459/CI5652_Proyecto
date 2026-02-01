@@ -15,11 +15,14 @@
 #include <cmath>
 #include <numeric>
 #include <iomanip>
+#include <random> // Para generacion aleatoria segura en hilos
+#include <omp.h>  // Para poder usar tu CPU al maximo
+#include <mutex>  // Para que el texto no se mezcle en consola
 
 using namespace std;
 
 // Configuración
-const int NUM_CORRIDAS = 30; // Requerimiento estadístico
+const int NUM_CORRIDAS = 30;
 
 enum class TBool : int8_t
 {
@@ -32,7 +35,6 @@ struct Conteo
 {
   int pos = 0;
   int neg = 0;
-  // Para resetear entre corridas
   void reset()
   {
     pos = 0;
@@ -55,27 +57,20 @@ public:
   }
 
   const vector<int> &getVariables() const { return variables; }
-
   TBool getSatisfaccion() const { return satisfaccion; }
-
-  // Reinicia la cláusula para una nueva corrida
   void reset() { satisfaccion = TBool::Unknown; }
 
-  // Actualiza satisfacción y modifica frecuencias dinámicamente
   void setSatisfaccion(const vector<TBool> &variablesGlobales, vector<Conteo> *ptrFrecuencias)
   {
     bool esperanza = false;
-
     for (const int &v : variables)
     {
       int indice = abs(v) - 1;
       TBool valorVar = variablesGlobales[indice];
 
-      // Si la cláusula se satisface
       if ((v > 0 && valorVar == TBool::True) || (v < 0 && valorVar == TBool::False))
       {
         satisfaccion = TBool::True;
-        // Actualizar frecuencias (reducirlas porque la cláusula ya se cumplió)
         actualizarFrecuencias(ptrFrecuencias);
         return;
       }
@@ -86,7 +81,6 @@ public:
     if (!esperanza)
     {
       satisfaccion = TBool::False;
-      // También actualizamos frecuencias si ya es imposible satisfacerla
       actualizarFrecuencias(ptrFrecuencias);
     }
     else
@@ -140,12 +134,8 @@ private:
 
 public:
   Formula() {}
-  Formula(const vector<Clausula> &clauses)
-  { // Copia profunda para resetear
-    clausulas = clauses;
-  }
+  Formula(const vector<Clausula> &clauses) { clausulas = clauses; }
 
-  // Calcula costo (Cláusulas insatisfechas)
   int calcularCosto(const vector<TBool> &vars)
   {
     int costo = 0;
@@ -157,10 +147,8 @@ public:
     return costo;
   }
 
-  // Heurística Constructiva
   void solverConstructivo(vector<TBool> &variablesGlobales, vector<Conteo> frecs)
   {
-    // Nota: Recibimos 'frecs' por copia para poder modificarla sin dañar la original del main
     int variablesPendientes = variablesGlobales.size();
     while (variablesPendientes > 0)
     {
@@ -174,8 +162,7 @@ public:
       bool valor = moda->pos >= moda->neg;
 
       variablesGlobales[idModa] = valor ? TBool::True : TBool::False;
-
-      moda->pos = -9999; // Sacar de competencia
+      moda->pos = -9999;
       moda->neg = -9999;
 
       for (Clausula &clausula : clausulas)
@@ -195,7 +182,6 @@ public:
     }
   }
 
-  // Búsqueda Local: Hill Climbing
   void busquedaLocal(vector<TBool> &vars)
   {
     bool mejora = true;
@@ -224,7 +210,7 @@ public:
         {
           costoActual = nuevoCosto;
           mejora = true;
-          break; // First improvement
+          break;
         }
         else
         {
@@ -234,21 +220,23 @@ public:
     }
   }
 
-  // ILS
-  void busquedaLocalIterada(vector<TBool> &vars, int maxIteraciones)
+  void busquedaLocalIterada(vector<TBool> &vars, int maxIteraciones, mt19937 &gen)
   {
     int mejorCosto = calcularCosto(vars);
     vector<TBool> mejorSolucion = vars;
 
+    // Distribución uniforme para elegir variables al azar
+    uniform_int_distribution<> dis(0, vars.size() - 1);
+
     for (int i = 0; i < maxIteraciones; i++)
     {
-      vector<TBool> actual = mejorSolucion; // Empezamos desde la mejor conocida (Elitista)
+      vector<TBool> actual = mejorSolucion;
 
       // 1. Perturbación (Random k-flip 5%)
       int k = max(1, (int)(vars.size() * 0.05));
       for (int j = 0; j < k; j++)
       {
-        int idx = rand() % vars.size();
+        int idx = dis(gen); // Usamos el generador seguro
         actual[idx] = (actual[idx] == TBool::True) ? TBool::False : TBool::True;
       }
 
@@ -301,117 +289,136 @@ double promedio(const vector<double> &v)
   double sum = accumulate(v.begin(), v.end(), 0.0);
   return sum / v.size();
 }
-double desviacion(const vector<double> &v, double mean)
-{
-  if (v.size() <= 1)
-    return 0.0;
-  double sq_sum = inner_product(v.begin(), v.end(), v.begin(), 0.0);
-  double stdev = sqrt(sq_sum / v.size() - mean * mean);
-  return stdev;
-}
 
 int main(int argc, char const *argv[])
 {
-  srand(time(0));
+  // Optimizacion de I/O
+  ios_base::sync_with_stdio(false);
+  cin.tie(NULL);
+
   if (argc < 2)
   {
-    cout << "Uso: ./solver archivo.cnf" << endl;
+    cout << "Uso: ./solver archivo1.cnf [archivo2.cnf ...]" << endl;
     return 1;
   }
 
-  ifstream archivo(argv[1]);
-  if (!archivo.is_open())
-  {
-    cout << "Error abriendo archivo" << endl;
-    return 1;
-  }
+  cout << "==========================================================================================================" << endl;
+  cout << " REPORTE COMPARATIVO 30 REPETICIONES: Heurística vs Búsqueda Local (LS) vs Búsqueda Local Iterada (ILS)" << endl;
+  cout << "==========================================================================================================" << endl;
 
-  // 1. Lectura del archivo (solo una vez)
-  string linea;
-  pair<int, int> datosFormula = {0, 0};
-  vector<Clausula> clausulasBase;
-  vector<Conteo> frecuenciasBase;
+  // Encabezados ajustados para 3 metodos
+  cout << left << setw(35) << "Archivo"
+       << "| " << setw(8) << "Costo H"
+       << "| " << setw(8) << "T. H(s)"
+       << "| " << setw(8) << "Costo LS"
+       << "| " << setw(8) << "T. LS(s)"
+       << "| " << setw(9) << "Costo ILS"
+       << "| " << setw(9) << "T. ILS(s)"
+       << "| " << setw(6) << "Gap H-I%" << endl;
+  cout << "----------------------------------------------------------------------------------------------------------" << endl;
 
-  while (getline(archivo, linea))
+#pragma omp parallel for schedule(dynamic)
+  for (int f = 1; f < argc; f++)
   {
-    if (linea.empty() || linea[0] == 'c')
+    string nombreArchivo = argv[f];
+
+    // Semilla unica por hilo
+    size_t seed = hash<string>{}(nombreArchivo) + omp_get_thread_num();
+    mt19937 gen(seed);
+
+    ifstream archivo(nombreArchivo);
+    if (!archivo.is_open())
       continue;
-    if (linea[0] == 'p')
+
+    string linea;
+    pair<int, int> datosFormula = {0, 0};
+    vector<Clausula> clausulasBase;
+    vector<Conteo> frecuenciasBase;
+
+    while (getline(archivo, linea))
     {
-      datosFormula = leerPreambulo(linea);
-      frecuenciasBase.resize(datosFormula.first);
-      clausulasBase.reserve(datosFormula.second);
+      if (linea.empty() || linea[0] == 'c')
+        continue;
+      if (linea[0] == 'p')
+      {
+        datosFormula = leerPreambulo(linea);
+        frecuenciasBase.resize(datosFormula.first);
+        clausulasBase.reserve(datosFormula.second);
+      }
+      else if (isdigit(linea[0]) || linea[0] == '-')
+      {
+        clausulasBase.push_back(crearClausula(linea, frecuenciasBase));
+      }
     }
-    else if (isdigit(linea[0]) || linea[0] == '-')
+    archivo.close();
+
+    // Vectores para guardar promedios de los 3 metodos
+    vector<double> tH, tLS, tILS;
+    vector<double> cH, cLS, cILS;
+
+    for (int iter = 0; iter < NUM_CORRIDAS; iter++)
     {
-      clausulasBase.push_back(crearClausula(linea, frecuenciasBase));
+      // 1. HEURISTICA CONSTRUCTIVA (Base)
+      vector<TBool> vars = vector<TBool>(datosFormula.first, TBool::Unknown);
+      vector<Conteo> frecs = frecuenciasBase;
+      Formula problema(clausulasBase);
+
+      auto start = chrono::high_resolution_clock::now();
+      problema.solverConstructivo(vars, frecs); // Construimos solucion inicial
+      auto end = chrono::high_resolution_clock::now();
+
+      double costoH = problema.calcularCosto(vars);
+      tH.push_back(chrono::duration<double>(end - start).count());
+      cH.push_back(costoH);
+
+      // Copiamos la solucion de la heuristica para usarla en LS y en ILS por separado
+      vector<TBool> varsParaLS = vars;
+      vector<TBool> varsParaILS = vars;
+
+      // 2. BUSQUEDA LOCAL
+      start = chrono::high_resolution_clock::now();
+      problema.busquedaLocal(varsParaLS);
+      end = chrono::high_resolution_clock::now();
+
+      tLS.push_back(chrono::duration<double>(end - start).count());
+      cLS.push_back(problema.calcularCosto(varsParaLS));
+
+      // 3. BUSQUEDA LOCAL ITERADA
+      start = chrono::high_resolution_clock::now();
+      problema.busquedaLocalIterada(varsParaILS, 20, gen);
+      end = chrono::high_resolution_clock::now();
+
+      tILS.push_back(chrono::duration<double>(end - start).count());
+      cILS.push_back(problema.calcularCosto(varsParaILS));
+    }
+
+    // Promedios
+    double mCH = promedio(cH);
+    double mTH = promedio(tH);
+    double mCLS = promedio(cLS);
+    double mTLS = promedio(tLS);
+    double mCILS = promedio(cILS);
+    double mTILS = promedio(tILS);
+
+    // Mejora total (Heuristica vs ILS)
+    double mejora = (mCH > 0) ? ((mCH - mCILS) / mCH) * 100.0 : 0.0;
+
+#pragma omp critical
+    {
+      cout << fixed << setprecision(2);
+      string nombreCorto = (nombreArchivo.length() > 33) ? "..." + nombreArchivo.substr(nombreArchivo.length() - 30) : nombreArchivo;
+
+      cout << left << setw(35) << nombreCorto
+           << "| " << setw(8) << mCH
+           << "| " << setw(8) << setprecision(4) << mTH
+           << "| " << setw(8) << setprecision(2) << mCLS
+           << "| " << setw(8) << setprecision(4) << mTLS
+           << "| " << setw(9) << setprecision(2) << mCILS
+           << "| " << setw(9) << setprecision(4) << mTILS
+           << "| " << setw(5) << setprecision(1) << mejora << "%" << endl;
     }
   }
 
-  // Vectores para estadísticas
-  vector<double> tHeur, tBL, tILS;
-  vector<double> cHeur, cBL, cILS;
-
-  cout << "Iniciando " << NUM_CORRIDAS << " corridas. Paciencia..." << endl;
-  cout << "Progreso: [";
-
-  // 2. Bucle de 30 corridas
-  for (int iter = 0; iter < NUM_CORRIDAS; iter++)
-  {
-    if (iter % 3 == 0)
-    {
-      cout << "#" << flush;
-    } // Barra de progreso
-
-    // Resetear estado para esta iteración
-    vector<TBool> vars = vector<TBool>(datosFormula.first, TBool::Unknown);
-    vector<Conteo> frecsIter = frecuenciasBase; // Copia fresca
-    Formula problema(clausulasBase);            // Copia fresca de cláusulas
-
-    // --- Heurística ---
-    auto start = chrono::high_resolution_clock::now();
-    problema.solverConstructivo(vars, frecsIter);
-    auto end = chrono::high_resolution_clock::now();
-    tHeur.push_back(chrono::duration<double>(end - start).count());
-    cHeur.push_back(problema.calcularCosto(vars));
-
-    // --- Búsqueda Local ---
-    start = chrono::high_resolution_clock::now();
-    problema.busquedaLocal(vars);
-    end = chrono::high_resolution_clock::now();
-    tBL.push_back(chrono::duration<double>(end - start).count()); // BL es acumulativo al tiempo de heurística
-    cBL.push_back(problema.calcularCosto(vars));
-
-    // --- ILS ---
-    start = chrono::high_resolution_clock::now();
-    problema.busquedaLocalIterada(vars, 20); // 20 iteraciones ILS
-    end = chrono::high_resolution_clock::now();
-    tILS.push_back(chrono::duration<double>(end - start).count());
-    cILS.push_back(problema.calcularCosto(vars));
-  }
-  cout << "] Fin!" << endl
-       << endl;
-
-  // 3. Resultados Estadísticos
-  cout << fixed << setprecision(4);
-  cout << "===========================================" << endl;
-  cout << " RESULTADOS PROMEDIO (" << NUM_CORRIDAS << " corridas)" << endl;
-  cout << "===========================================" << endl;
-  cout << "Algoritmo      | Tiempo (s) (Desv) | Costo (Insat) (Desv)" << endl;
-  cout << "-------------------------------------------" << endl;
-
-  double mTH = promedio(tHeur), dTH = desviacion(tHeur, mTH);
-  double mCH = promedio(cHeur), dCH = desviacion(cHeur, mCH);
-  cout << "Heuristica     | " << mTH << " (" << dTH << ") | " << mCH << " (" << dCH << ")" << endl;
-
-  double mTB = promedio(tBL), dTB = desviacion(tBL, mTB);
-  double mCB = promedio(cBL), dCB = desviacion(cBL, mCB);
-  cout << "Busqueda Local | " << mTB << " (" << dTB << ") | " << mCB << " (" << dCB << ")" << endl;
-
-  double mTILS = promedio(tILS), dTILS = desviacion(tILS, mTILS);
-  double mCILS = promedio(cILS), dCILS = desviacion(cILS, mCILS);
-  cout << "ILS            | " << mTILS << " (" << dTILS << ") | " << mCILS << " (" << dCILS << ")" << endl;
-  cout << "===========================================" << endl;
-
+  cout << "==========================================================================================================" << endl;
   return 0;
 }

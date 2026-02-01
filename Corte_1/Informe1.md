@@ -34,10 +34,11 @@ variables tal que se minimice la cantidad de cláusulas insatisfechas o,
 equivalentemente, se maximice las cláusulas satisfechas. \[1\]
 
 En la literatura, existen varias especializaciones de MaxSAT \[1\]:
+
 - MaxSAT ponderado: existen cláusulas que tienen mayor preferencia para ser
-satisfechas (tienen mayor peso o ponderación).
+  satisfechas (tienen mayor peso o ponderación).
 - MaxSAT parcial: existen cláusulas que obligatoriamente deben satisfacerse
-(_hard_) y otras que se permite que no se satisfagan (_soft_).
+  (_hard_) y otras que se permite que no se satisfagan (_soft_).
 - MaxSAT ponderado parcial: Una combinación de los casos anteriores.
 
 En este estudio se trabajará con el problema simple MAXSAT donde puede decirse
@@ -66,12 +67,12 @@ archivos se presenta en la tabla 1.
 
 Tabla 1. Descripción de los archivos del _benchmark_
 
-| Archivo | Variables | Cláusulas |      Casos     | Lógica |
-|:-------:|:---------:|:---------:|:--------------:|:------:|
-|    n5   |   61600   |   221790  | 500 - 1k - 10k |  UAI13 |
-|    n6   |  328107   |  1206162  |    500 - 10k   |  UAI13 |
-|    n6   |   12764   |   46236   | 500 - 1k - 10k |  UAI14 |
-|    n7   |   40290   |   145910  | 500 - 1k - 10k |  UAI14 |
+| Archivo | Variables | Cláusulas |     Casos      | Lógica |
+| :-----: | :-------: | :-------: | :------------: | :----: |
+|   n5    |   61600   |  221790   | 500 - 1k - 10k | UAI13  |
+|   n6    |  328107   |  1206162  |   500 - 10k    | UAI13  |
+|   n6    |   12764   |   46236   | 500 - 1k - 10k | UAI14  |
+|   n7    |   40290   |  145910   | 500 - 1k - 10k | UAI14  |
 
 ## Solución exacta: EvalMaxSAT
 
@@ -111,22 +112,22 @@ corresponde a la desviación estándar sobre la última cifra significativa.
 
 Tabla 2. Resultados de las corridas
 
-| Archivo | Casos | S. exacto (s) | S. heurístico (s) | B. L. (s) | B. L. I. (s)
-|:-------:|:-----:|:-------------:|:-----------------:|:---------:|:-----------:
-|  n5 i2  |  500  |    0.25(5)    |     1.2(1)×10²    |           |
-|  n5 i4  |  500  |    0.24(2)    |     113(8)        |           |
-|  n5 i5  |  10k  |    0.25(2)    |     108(2)        |           |
-|  n5 i7  |  1k   |    0.116(8)   |     108.1(9)      |           |
-|  n5 i8  |  10k  |    0.089(7)   |     3.13(3)×10³   |           |
-|  n6 i1  |  500  |    1.03(5)    |     3.80(4)       |           |
-|  n6 i4  |  500  |    0.038(8)   |     3.13(1)×10³  |           |
+| Archivo | Casos | S. exacto (s) | S. heurístico (s) | B. L. (s) | B. L. I. (s) |
+| :-----: | :---: | :-----------: | :---------------: | :-------: | :----------: |
+|  n5 i2  |  500  |    0.25(5)    |    1.2(1)×10²     |           |
+|  n5 i4  |  500  |    0.24(2)    |      113(8)       |           |
+|  n5 i5  |  10k  |    0.25(2)    |      108(2)       |           |
+|  n5 i7  |  1k   |   0.116(8)    |     108.1(9)      |           |
+|  n5 i8  |  10k  |   0.089(7)    |    3.13(3)×10³    |           |
+|  n6 i1  |  500  |    1.03(5)    |      3.80(4)      |           |
+|  n6 i4  |  500  |   0.038(8)    |    3.13(1)×10³    |           |
 |  n6 i5  |  10k  |    1.27(4)    |                   |           |
-|  n6 i7  |  1k   |    0.027(6)   |                   |           |
-|  n6 i8  |  1k   |    0.020(3)   |                   |           |
-|  n6 i9  |  10k  |    0.028(6)   |                   |           |
-|  n6 i9  |  1k   |    0.029(7)   |                   |           |
-|  n7 i8  |  10k  |    0.062(9)   |                   |           |
-|  n7 i8  |  1k   |    0.062(8)   |                   |           |
+|  n6 i7  |  1k   |   0.027(6)    |                   |           |
+|  n6 i8  |  1k   |   0.020(3)    |                   |           |
+|  n6 i9  |  10k  |   0.028(6)    |                   |           |
+|  n6 i9  |  1k   |   0.029(7)    |                   |           |
+|  n7 i8  |  10k  |   0.062(9)    |                   |           |
+|  n7 i8  |  1k   |   0.062(8)    |                   |           |
 |  n7 i9  |  500  |    0.06(1)    |                   |           |
 
 Se puede observar que la implementación de diferentes algoritmos lleva a
