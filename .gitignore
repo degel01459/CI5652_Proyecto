@@ -1,0 +1,9 @@
+# Ignorar configuración de VS Code
+.vscode/
+
+# Ignorar ejecutables de Windows
+*.exe
+
+# Ignorar archivos de depuración (opcional)
+*.pdb
+*.obj
