@@ -1,7 +1,8 @@
 # Informe 1
 
 Elaborado por: Alejandro Segnini (17-10684), Ángel Rodríguez (15-11669),
-Francisco Márquez (12-11163), Kevin Briceño (15-11661), Sergio.
+Francisco Márquez (12-11163), Kevin Briceño (15-11661), Sergio Carrillo
+(14-11315).
 
 ## Introducción
 
