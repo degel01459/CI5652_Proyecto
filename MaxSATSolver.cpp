@@ -457,6 +457,111 @@ public:
       }
       vars = mejorSolucionGlobal;
   }
+
+  void algoritmoGenetico(vector<TBool> &vars, int tamanoPoblacion, int maxGeneraciones, double probCruce, double probMutacion, mt19937 &gen) 
+  {
+      int n = vars.size();
+      
+      // Inicializar población
+      vector<vector<TBool>> poblacion(tamanoPoblacion, vector<TBool>(n));
+      uniform_int_distribution<> disBool(0, 1);
+      
+      // El individuo 0 es la solución inicial proporcionada (ej. de la heurística)
+      poblacion[0] = vars;
+      for (int i = 1; i < tamanoPoblacion; i++) 
+      {
+          for (int j = 0; j < n; j++) 
+          {
+              poblacion[i][j] = disBool(gen) ? TBool::True : TBool::False;
+          }
+      }
+
+      vector<TBool> mejorSolucionGlobal = vars;
+      int mejorCostoGlobal = calcularCosto(mejorSolucionGlobal);
+
+      // Distribuciones para cruce, mutación y torneo
+      uniform_real_distribution<> disProb(0.0, 1.0);
+      uniform_int_distribution<> disTorneo(0, tamanoPoblacion - 1);
+
+      // Lambda para Selección por Torneo (minimización de costo)
+      auto seleccionTorneo = [&](const vector<int>& costos, int k) {
+          int mejorIdx = disTorneo(gen);
+          for (int i = 1; i < k; ++i) {
+              int candidato = disTorneo(gen);
+              if (costos[candidato] < costos[mejorIdx]) {
+                  mejorIdx = candidato;
+              }
+          }
+          return mejorIdx;
+      };
+
+      // Lambda para Mutación (Bit-flip)
+      auto mutar = [&](vector<TBool>& ind) {
+          for (int j = 0; j < n; j++) {
+              if (disProb(gen) < probMutacion) {
+                  ind[j] = (ind[j] == TBool::True) ? TBool::False : TBool::True;
+              }
+          }
+      };
+
+      // Ciclo Evolutivo
+      for (int genIdx = 0; genIdx < maxGeneraciones; genIdx++) 
+      {
+          vector<int> costos(tamanoPoblacion);
+          for (int i = 0; i < tamanoPoblacion; i++) 
+          {
+              costos[i] = calcularCosto(poblacion[i]);
+              if (costos[i] < mejorCostoGlobal) 
+              {
+                  mejorCostoGlobal = costos[i];
+                  mejorSolucionGlobal = poblacion[i];
+              }
+          }
+
+          vector<vector<TBool>> nuevaPoblacion(tamanoPoblacion, vector<TBool>(n));
+          
+          // Elitismo: Pasar al mejor de la generación actual directamente a la siguiente
+          int idxMejorActual = distance(costos.begin(), min_element(costos.begin(), costos.end()));
+          nuevaPoblacion[0] = poblacion[idxMejorActual];
+
+          // Generar el resto de la población
+          for (int i = 1; i < tamanoPoblacion; i += 2) 
+          {
+              // Selección
+              int p1 = seleccionTorneo(costos, 3);
+              int p2 = seleccionTorneo(costos, 3);
+
+              vector<TBool> hijo1 = poblacion[p1];
+              vector<TBool> hijo2 = poblacion[p2];
+
+              // Cruce Uniforme
+              if (disProb(gen) < probCruce) 
+              {
+                  for (int j = 0; j < n; j++) 
+                  {
+                      if (disProb(gen) < 0.5) 
+                      {
+                          swap(hijo1[j], hijo2[j]);
+                      }
+                  }
+              }
+
+              // Mutación
+              mutar(hijo1);
+              mutar(hijo2);
+
+              nuevaPoblacion[i] = hijo1;
+              if (i + 1 < tamanoPoblacion) 
+              {
+                  nuevaPoblacion[i + 1] = hijo2;
+              }
+          }
+          poblacion = move(nuevaPoblacion); // move para optimizar memoria
+      }
+      
+      // Retornar la mejor solución encontrada
+      vars = mejorSolucionGlobal;
+  }
 };
 
 Clausula crearClausula(string linea, vector<Conteo> &frecuencias)
@@ -565,8 +670,10 @@ int main(int argc, char const *argv[])
        << "| " << setw(11) << "T. TS(s)"
        << "| " << setw(11) << "Costo SA"
        << "| " << setw(11) << "T. SA(s)"
-       << "| " << setw(11) << "C. GRASP"
+       << "| " << setw(11) << "Costo GRASP"
        << "| " << setw(11) << "T. GRASP(s)"
+       << "| " << setw(11) << "Costo AG"
+       << "| " << setw(11) << "T. AG(s)"
        << "| " << setw(6) << "Gap H-I%" << endl;
   cout << "----------------------------------------------------------------------------------------------------------" << endl;
 
@@ -606,8 +713,8 @@ int main(int argc, char const *argv[])
     archivo.close();
 
     // Vectores para guardar promedios de los metodos
-    vector<double> tH, tLS, tILS, tTS, tSA, tGRASP;
-    vector<double> cH, cLS, cILS, cTS, cSA, cGRASP;
+    vector<double> tH, tLS, tILS, tTS, tSA, tGRASP, tAG;
+    vector<double> cH, cLS, cILS, cTS, cSA, cGRASP, cAG;
 
     for (int iter = 0; iter < NUM_CORRIDAS; iter++)
     {
@@ -675,6 +782,18 @@ int main(int argc, char const *argv[])
       tGRASP.push_back(chrono::duration<double>(end - start).count());
       cGRASP.push_back(problema.calcularCosto(varsParaGRASP));
 
+      // 7. ALGORITMO GENÉTICO
+      vector<TBool> varsParaAG = vars; // Iniciamos con la solución de la constructiva
+      
+      // Parámetros: Población=50, Generaciones=100, Cruce=0.85, Mutación=1.0/vars
+      double probMutacion = 1.0 / datosFormula.first; 
+      
+      start = chrono::high_resolution_clock::now();
+      problema.algoritmoGenetico(varsParaAG, 50, 100, 0.85, probMutacion, gen);
+      end = chrono::high_resolution_clock::now();
+
+      tAG.push_back(chrono::duration<double>(end - start).count());
+      cAG.push_back(problema.calcularCosto(varsParaAG));
     }
 
     // Promedios
@@ -690,6 +809,8 @@ int main(int argc, char const *argv[])
     double mTSA = promedio(tSA);
     double mCGRASP = promedio(cGRASP);
     double mTGRASP = promedio(tGRASP);
+    double mCAG = promedio(cAG);
+    double mTAG = promedio(tAG);
 
     // DesviacionesEstandar
     double sdCH = desviacionEstandar(cH, mCH);
@@ -704,6 +825,8 @@ int main(int argc, char const *argv[])
     double sdTSA = desviacionEstandar(tSA, mTSA);
     double sdCGRASP = desviacionEstandar(cGRASP, mCGRASP);
     double sdTGRASP = desviacionEstandar(tGRASP, mTGRASP);
+    double sdCAG = desviacionEstandar(cAG, mCAG);
+    double sdTAG = desviacionEstandar(tAG, mTAG);
 
     // Mejora total (Heuristica vs ILS)
     double mejora = (mCH > 0) ? ((mCH - mCILS) / mCH) * 100.0 : 0.0;
@@ -714,7 +837,7 @@ int main(int argc, char const *argv[])
       string nombreCorto = (nombreArchivo.length() > 33) ? "..." + nombreArchivo.substr(nombreArchivo.length() - 30) : nombreArchivo;
 
       cout << left << setw(35) << nombreCorto
-           << "| " << setw(9)
+           << "| " << setw(9) << "-------- "
            << "| " << setw(10) << formatearMedida(mCH, sdCH)
            << "| " << setw(10) << formatearMedida(mTH, sdTH)
            << "| " << setw(10) << formatearMedida(mCLS, sdCLS)
@@ -727,6 +850,8 @@ int main(int argc, char const *argv[])
            << "| " << setw(11) << formatearMedida(mTSA, sdTSA)
            << "| " << setw(11) << formatearMedida(mCGRASP, sdCGRASP)
            << "| " << setw(11) << formatearMedida(mTGRASP, sdTGRASP)
+           << "| " << setw(11) << formatearMedida(mCAG, sdCAG)
+           << "| " << setw(11) << formatearMedida(mTAG, sdTAG)
            << "| " << setw(5) << mejora << "%" << endl;
     }
   }
