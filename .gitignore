@@ -7,3 +7,4 @@
 # Ignorar archivos de depuración (opcional)
 *.pdb
 *.obj
+*.cnf
