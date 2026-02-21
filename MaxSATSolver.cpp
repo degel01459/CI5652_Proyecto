@@ -23,7 +23,7 @@
 using namespace std;
 
 // Configuración
-const int NUM_CORRIDAS = 30;
+const int NUM_CORRIDAS = 1;
 
 enum class TBool : int8_t
 {
@@ -132,10 +132,23 @@ class Formula
 {
 private:
   vector<Clausula> clausulas;
+  vector<vector<int>> apariciones;
 
 public:
   Formula() {}
-  Formula(const vector<Clausula> &clauses) { clausulas = clauses; }
+  Formula(const vector<Clausula> &clauses, int numVars)
+  {
+    clausulas = clauses;
+    apariciones.resize(numVars);
+
+    for (size_t i = 0; i < clausulas.size(); i++)
+    {
+      for (int v : clausulas[i].getVariables())
+      {
+        apariciones[abs(v) - 1].push_back(i);
+      }
+    }
+  }
 
   int calcularCosto(const vector<TBool> &vars)
   {
@@ -146,6 +159,26 @@ public:
         costo++;
     }
     return costo;
+  }
+
+  int evaluarFlip(vector<TBool> &vars, int varIdx)
+  {
+    int costoAntes = 0;
+    int costoDespues = 0;
+
+    for (int idxClausula : apariciones[varIdx]) {
+      if (!clausulas[idxClausula].esSatisfecha(vars)) costoAntes++;
+    }
+
+    vars[varIdx] = (vars[varIdx] == TBool::True) ? TBool::False : TBool::True;
+
+    for (int idxClausula : apariciones[varIdx]) {
+      if (!clausulas[idxClausula].esSatisfecha(vars)) costoDespues++;
+    }
+
+    vars[varIdx] = (vars[varIdx] == TBool::True) ? TBool::False : TBool::True;
+
+    return costoDespues - costoAntes;
   }
 
   void solverConstructivo(vector<TBool> &variablesGlobales, vector<Conteo> frecs)
@@ -166,9 +199,10 @@ public:
       moda->pos = -9999;
       moda->neg = -9999;
 
-      for (Clausula &clausula : clausulas)
+      for (int idxClausula : apariciones[idModa])
       {
-        if (clausula.getSatisfaccion() == TBool::Unknown && clausula.aparece(idModa))
+        Clausula &clausula = clausulas[idxClausula];
+        if (clausula.getSatisfaccion() == TBool::Unknown)
         {
           clausula.setSatisfaccion(variablesGlobales, &frecs);
         }
@@ -184,6 +218,26 @@ public:
   }
 
   void busquedaLocal(vector<TBool> &vars)
+  {
+    bool mejora = true;
+    while (mejora)
+    {
+      mejora = false;
+      for (int i = 0; i < vars.size(); i++)
+      {
+        // Preguntamos: ¿Qué pasa si invierto la variable i?
+        int delta = evaluarFlip(vars, i);
+        if (delta < 0) // Si el delta es negativo, el costo baja (mejora!)
+        {
+          // Aplicamos el cambio permanentemente
+          vars[i] = (vars[i] == TBool::True) ? TBool::False : TBool::True;
+          mejora = true;
+          break; // First-Improvement: aplicamos la primera mejora que encontramos
+        }
+      }
+    }
+  }
+  /*void busquedaLocal(vector<TBool> &vars)
   {
     bool mejora = true;
     int costoActual = calcularCosto(vars);
@@ -219,7 +273,7 @@ public:
         }
       }
     }
-  }
+  }*/
 
   void busquedaLocalIterada(vector<TBool> &vars, int maxIteraciones, mt19937 &gen)
   {
@@ -260,12 +314,12 @@ public:
    */
 
   // Dentro de la clase Formula:
-  void busquedaTabu(vector<TBool> &vars, int maxIteraciones, int tenureBase) 
+  void busquedaTabu(vector<TBool> &vars, int maxIteraciones, int tenureBase)
   {
       int n = vars.size();
       // 1. Estructura de Lista Tabú: almacena la iteración hasta la cual la variable está prohibida
       vector<int> tabuUntil(n, 0);
-      
+
       vector<TBool> mejorSolucionGlobal = vars;
       int mejorCostoGlobal = calcularCosto(vars);
       int costoActual = mejorCostoGlobal;
@@ -275,47 +329,43 @@ public:
       mt19937 gen(rd());
       uniform_int_distribution<> disTenure(0, 5); // Variación de tenure
 
-      for (int iter = 1; iter <= maxIteraciones; iter++) 
+      for (int iter = 1; iter <= maxIteraciones; iter++)
       {
           int mejorVarIdx = -1;
           int mejorDelta = 1e9; // Buscamos el menor delta (incluso si es positivo/peor)
 
           // 2. Exploración de la vecindad 1-flip
-          for (int i = 0; i < n; i++) 
+          for (int i = 0; i < n; i++)
           {
               // Simular el flip
-              vars[i] = (vars[i] == TBool::True) ? TBool::False : TBool::True;
-              int nuevoCosto = calcularCosto(vars);
-              int delta = nuevoCosto - costoActual;
+              int delta = evaluarFlip(vars, i);
+              int nuevoCosto = costoActual + delta;
 
               // 3. Lógica de aceptación con Criterio de Aspiración
               bool esTabu = (iter < tabuUntil[i]);
               bool aspira = (nuevoCosto < mejorCostoGlobal);
 
-              if (!esTabu || aspira) 
+              if (!esTabu || aspira)
               {
-                  if (delta < mejorDelta) 
+                  if (delta < mejorDelta)
                   {
                       mejorDelta = delta;
                       mejorVarIdx = i;
                   }
               }
-              
-              // Revertir para probar la siguiente variable
-              vars[i] = (vars[i] == TBool::True) ? TBool::False : TBool::True;
           }
 
           // 4. Ejecutar el mejor movimiento encontrado (aunque sea peor que el actual)
-          if (mejorVarIdx != -1) 
+          if (mejorVarIdx != -1)
           {
               vars[mejorVarIdx] = (vars[mejorVarIdx] == TBool::True) ? TBool::False : TBool::True;
               costoActual += mejorDelta;
-              
+
               // Actualizar lista tabú con tenure variable
               tabuUntil[mejorVarIdx] = iter + tenureBase + disTenure(gen);
 
               // Actualizar mejor global si aplica
-              if (costoActual < mejorCostoGlobal) 
+              if (costoActual < mejorCostoGlobal)
               {
                   mejorCostoGlobal = costoActual;
                   mejorSolucionGlobal = vars;
@@ -331,10 +381,10 @@ public:
       int n = vars.size();
       vector<TBool> actual = vars;
       vector<TBool> mejorSolucionGlobal = vars;
-      
+
       int costoActual = calcularCosto(actual);
       int mejorCostoGlobal = costoActual;
-      
+
       double T = tempInicial;
       double T_min = 0.01; // Temperatura de parada
 
@@ -342,40 +392,34 @@ public:
       uniform_int_distribution<> varDist(0, n - 1);
       uniform_real_distribution<> probDist(0.0, 1.0);
 
-      while (T > T_min) 
+      while (T > T_min)
       {
-          for (int i = 0; i < iterPorTemp; i++) 
+          for (int i = 0; i < iterPorTemp; i++)
           {
               // 1. Elegir un vecino aleatorio (1-flip)
               int idx = varDist(gen);
-              actual[idx] = (actual[idx] == TBool::True) ? TBool::False : TBool::True;
-              
-              int nuevoCosto = calcularCosto(actual);
-              int delta = nuevoCosto - costoActual; // delta < 0 es una mejora
+              int delta = evaluarFlip(actual, idx);
+              int nuevoCosto = costoActual + delta;
 
               // 2. Criterio de aceptación (Metrópolis)
-              if (delta < 0) 
+              if (delta < 0)
               {
                   // Mejora directa
+                  actual[idx] = (actual[idx] == TBool::True) ? TBool::False : TBool::True;
                   costoActual = nuevoCosto;
-                  if (costoActual < mejorCostoGlobal) 
+                  if (costoActual < mejorCostoGlobal)
                   {
                       mejorCostoGlobal = costoActual;
                       mejorSolucionGlobal = actual;
                   }
-              } 
-              else 
+              }
+              else
               {
                   // Movimiento peor: se acepta con probabilidad e^(-delta / T)
                   double probabilidad = exp(-delta / T);
-                  if (probDist(gen) < probabilidad) 
+                  if (probDist(gen) < probabilidad)
                   {
                       costoActual = nuevoCosto;
-                  } 
-                  else 
-                  {
-                      // No se acepta: revertir el flip
-                      actual[idx] = (actual[idx] == TBool::True) ? TBool::False : TBool::True;
                   }
               }
           }
@@ -387,21 +431,97 @@ public:
 
   /**
    * Fase de Construcción de GRASP: Greedy Randomized
-   * @param alpha Parámetro entre 0 y 1. 
+   * @param alpha Parámetro entre 0 y 1.
    * 0 = Totalmente Greedy, 1 = Totalmente Aleatorio.
    */
-  void construccionGRASP(vector<TBool> &vars, vector<Conteo> frecs, double alpha, mt19937 &gen) 
+  void construccionGRASP(vector<TBool> &vars, vector<Conteo> frecs, double alpha, mt19937 &gen)
+  {
+    int n = vars.size();
+    int variablesPendientes = n;
+
+    // OPTIMIZACIÓN 1: Reutilizar el vector en lugar de crearlo en cada ciclo
+    vector<int> rcl;
+    rcl.reserve(n);
+
+    // OPTIMIZACIÓN 2: Hacemos una copia local del estado de satisfacción
+    // para no corromper el objeto Formula en las 20 iteraciones de GRASP.
+    vector<TBool> estadoClausulas(clausulas.size(), TBool::Unknown);
+
+    while (variablesPendientes > 0)
+    {
+      int s_min = numeric_limits<int>::max();
+      int s_max = numeric_limits<int>::min();
+
+      // 1. Encontrar S_min y S_max (sin asignar memoria)
+      for (int j = 0; j < n; j++) {
+        if (vars[j] == TBool::Unknown) {
+          int beneficio = max(frecs[j].pos, frecs[j].neg);
+          if (beneficio < s_min) s_min = beneficio;
+          if (beneficio > s_max) s_max = beneficio;
+        }
+      }
+
+      double umbral = s_max - alpha * (s_max - s_min);
+      rcl.clear(); // Limpiamos el vector, pero no reasignamos memoria
+
+      // 2. Llenar la RCL
+      for (int j = 0; j < n; j++) {
+        if (vars[j] == TBool::Unknown) {
+          int beneficio = max(frecs[j].pos, frecs[j].neg);
+          if (beneficio >= umbral) {
+            rcl.push_back(j);
+          }
+        }
+      }
+
+      // 3. Selección aleatoria
+      uniform_int_distribution<> dis(0, rcl.size() - 1);
+      int idElegido = rcl[dis(gen)];
+
+      bool valor = frecs[idElegido].pos >= frecs[idElegido].neg;
+      vars[idElegido] = valor ? TBool::True : TBool::False;
+
+      frecs[idElegido].pos = -99999;
+      frecs[idElegido].neg = -99999;
+
+      // 4. EL PASO ADAPTATIVO (Crucial para la calidad de GRASP)
+      for (size_t c = 0; c < clausulas.size(); c++) {
+        if (estadoClausulas[c] == TBool::Unknown && clausulas[c].aparece(idElegido)) {
+          // Verificamos si la cláusula se acaba de satisfacer
+          const auto& variablesC = clausulas[c].getVariables();
+          for (int v : variablesC) {
+            int idx = abs(v) - 1;
+            if (idx == idElegido) {
+              if ((v > 0 && vars[idx] == TBool::True) || (v < 0 && vars[idx] == TBool::False)) {
+                estadoClausulas[c] = TBool::True;
+                // Restamos frecuencias de las variables restantes en esta cláusula
+                for (int varClausula : variablesC) {
+                  if (vars[abs(varClausula) - 1] == TBool::Unknown) {
+                    if (varClausula > 0) frecs[abs(varClausula) - 1].pos--;
+                    else frecs[abs(varClausula) - 1].neg--;
+                  }
+                }
+                break;
+              }
+            }
+          }
+        }
+      }
+      variablesPendientes--;
+    }
+  }
+  /*void construccionGRASP(vector<TBool> &vars, vector<Conteo> frecs, double alpha, mt19937 &gen)
   {
       int n = vars.size();
       vector<int> asignados;
-      
+
       // Trabajamos con una copia de las cláusulas para simular la construcción
-      for (int i = 0; i < n; i++) 
+      for (int i = 0; i < n; i++)
       {
           // 1. Encontrar el rango de beneficio (S_min y S_max)
           int s_min = numeric_limits<int>::max();
           int s_max = numeric_limits<int>::min();
-          
+
           vector<pair<int, int>> candidatos; // {indice_var, beneficio}
           for (int j = 0; j < n; j++) {
               if (vars[j] == TBool::Unknown) {
@@ -415,7 +535,7 @@ public:
           // 2. Definir el umbral para la RCL (Lista Restringida de Candidatos)
           // Umbral = S_max - alpha * (S_max - S_min)
           double umbral = s_max - alpha * (s_max - s_min);
-          
+
           vector<int> rcl;
           for (auto& c : candidatos) {
               if (c.second >= umbral) {
@@ -426,29 +546,29 @@ public:
           // 3. Selección aleatoria de la RCL
           uniform_int_distribution<> dis(0, rcl.size() - 1);
           int idElegido = rcl[dis(gen)];
-          
+
           // Asignar y actualizar (similar a tu solverConstructivo)
           bool valor = frecs[idElegido].pos >= frecs[idElegido].neg;
           vars[idElegido] = valor ? TBool::True : TBool::False;
-          
+
           // Marcamos como procesada
           frecs[idElegido].pos = -99999;
           frecs[idElegido].neg = -99999;
       }
-  }
+  }*/
 
   void busquedaGRASP(vector<TBool> &vars, int maxIteraciones, double alpha, mt19937 &gen, const vector<Conteo>& frecsOriginales) 
   {
       int mejorCostoGlobal = numeric_limits<int>::max();
       vector<TBool> mejorSolucionGlobal;
 
-      for (int i = 0; i < maxIteraciones; i++) 
+      for (int i = 0; i < maxIteraciones; i++)
       {
           vector<TBool> actual(vars.size(), TBool::Unknown);
           // Enviamos copia de las frecuencias ya que la fase constructiva las modifica
-          construccionGRASP(actual, frecsOriginales, alpha, gen); 
+          construccionGRASP(actual, frecsOriginales, alpha, gen);
           busquedaLocal(actual);
-          
+
           int costoFinal = calcularCosto(actual);
           if (costoFinal < mejorCostoGlobal) {
               mejorCostoGlobal = costoFinal;
@@ -461,16 +581,16 @@ public:
   void algoritmoGenetico(vector<TBool> &vars, int tamanoPoblacion, int maxGeneraciones, double probCruce, double probMutacion, mt19937 &gen) 
   {
       int n = vars.size();
-      
+
       // Inicializar población
       vector<vector<TBool>> poblacion(tamanoPoblacion, vector<TBool>(n));
       uniform_int_distribution<> disBool(0, 1);
-      
+
       // El individuo 0 es la solución inicial proporcionada (ej. de la heurística)
       poblacion[0] = vars;
-      for (int i = 1; i < tamanoPoblacion; i++) 
+      for (int i = 1; i < tamanoPoblacion; i++)
       {
-          for (int j = 0; j < n; j++) 
+          for (int j = 0; j < n; j++)
           {
               poblacion[i][j] = disBool(gen) ? TBool::True : TBool::False;
           }
@@ -505,13 +625,13 @@ public:
       };
 
       // Ciclo Evolutivo
-      for (int genIdx = 0; genIdx < maxGeneraciones; genIdx++) 
+      for (int genIdx = 0; genIdx < maxGeneraciones; genIdx++)
       {
           vector<int> costos(tamanoPoblacion);
-          for (int i = 0; i < tamanoPoblacion; i++) 
+          for (int i = 0; i < tamanoPoblacion; i++)
           {
               costos[i] = calcularCosto(poblacion[i]);
-              if (costos[i] < mejorCostoGlobal) 
+              if (costos[i] < mejorCostoGlobal)
               {
                   mejorCostoGlobal = costos[i];
                   mejorSolucionGlobal = poblacion[i];
@@ -519,13 +639,13 @@ public:
           }
 
           vector<vector<TBool>> nuevaPoblacion(tamanoPoblacion, vector<TBool>(n));
-          
+
           // Elitismo: Pasar al mejor de la generación actual directamente a la siguiente
           int idxMejorActual = distance(costos.begin(), min_element(costos.begin(), costos.end()));
           nuevaPoblacion[0] = poblacion[idxMejorActual];
 
           // Generar el resto de la población
-          for (int i = 1; i < tamanoPoblacion; i += 2) 
+          for (int i = 1; i < tamanoPoblacion; i += 2)
           {
               // Selección
               int p1 = seleccionTorneo(costos, 3);
@@ -535,11 +655,11 @@ public:
               vector<TBool> hijo2 = poblacion[p2];
 
               // Cruce Uniforme
-              if (disProb(gen) < probCruce) 
+              if (disProb(gen) < probCruce)
               {
-                  for (int j = 0; j < n; j++) 
+                  for (int j = 0; j < n; j++)
                   {
-                      if (disProb(gen) < 0.5) 
+                      if (disProb(gen) < 0.5)
                       {
                           swap(hijo1[j], hijo2[j]);
                       }
@@ -551,14 +671,14 @@ public:
               mutar(hijo2);
 
               nuevaPoblacion[i] = hijo1;
-              if (i + 1 < tamanoPoblacion) 
+              if (i + 1 < tamanoPoblacion)
               {
                   nuevaPoblacion[i + 1] = hijo2;
               }
           }
           poblacion = move(nuevaPoblacion); // move para optimizar memoria
       }
-      
+
       // Retornar la mejor solución encontrada
       vars = mejorSolucionGlobal;
   }
@@ -615,11 +735,11 @@ string formatearMedida(double media, double desv_est) {
     // 1. Encontrar la posición de la primera cifra significativa de la desv. estándar
     // Log10 nos dice la magnitud. Floor nos da el exponente entero.
     int exponente = floor(log10(desv_est));
-    
+
     // 2. Extraer esa primera cifra
     // Multiplicamos para que la cifra sea la unidad, y redondeamos.
     int cifra = round(desv_est / pow(10, exponente));
-    
+
     // Caso especial: si el redondeo nos lleva a 10 (ej: 0.099 -> 0.1)
     if (cifra == 10) {
         cifra = 1;
@@ -658,7 +778,7 @@ int main(int argc, char const *argv[])
   cout << "==========================================================================================================" << endl;
 
   // Encabezados ajustados para 3 metodos
-  cout << left << setw(35) << "Archivo"
+  cout << left << setw(18) << "Archivo"
        << "| " << setw(9) << "Exacto"
        << "| " << setw(10) << "Costo H"
        << "| " << setw(10) << "T. H(s)"
@@ -670,11 +790,11 @@ int main(int argc, char const *argv[])
        << "| " << setw(11) << "T. TS(s)"
        << "| " << setw(11) << "Costo SA"
        << "| " << setw(11) << "T. SA(s)"
-       << "| " << setw(11) << "Costo GRASP"
-       << "| " << setw(11) << "T. GRASP(s)"
+       /*<< "| " << setw(11) << "Costo GRASP"
+       << "| " << setw(11) << "T. GRASP(s)"*/
        << "| " << setw(11) << "Costo AG"
        << "| " << setw(11) << "T. AG(s)"
-       << "| " << setw(6) << "Gap H-I%" << endl;
+       /*<< "| " << setw(6) << "Gap H-I%"*/ << endl;
   cout << "----------------------------------------------------------------------------------------------------------" << endl;
 
 #pragma omp parallel for schedule(dynamic)
@@ -697,15 +817,28 @@ int main(int argc, char const *argv[])
 
     while (getline(archivo, linea))
     {
-      if (linea.empty() || linea[0] == 'c')
+      // 1. Buscar el primer carácter que no sea espacio o tabulación
+      size_t inicio = linea.find_first_not_of(" \t\r\n");
+
+      // Si la línea está vacía o solo tiene espacios, la saltamos
+      if (inicio == string::npos)
         continue;
-      if (linea[0] == 'p')
+
+      // 2. Tomar el primer carácter real de la línea
+      char primerCaracter = linea[inicio];
+
+      if (primerCaracter == 'c')
       {
+        continue;
+      }
+      else if (primerCaracter == 'p')
+      {
+        // Pasamos la línea completa a tu función
         datosFormula = leerPreambulo(linea);
         frecuenciasBase.resize(datosFormula.first);
         clausulasBase.reserve(datosFormula.second);
       }
-      else if (isdigit(linea[0]) || linea[0] == '-')
+      else if (isdigit(primerCaracter) || primerCaracter == '-')
       {
         clausulasBase.push_back(crearClausula(linea, frecuenciasBase));
       }
@@ -713,23 +846,20 @@ int main(int argc, char const *argv[])
     archivo.close();
 
     // Vectores para guardar promedios de los metodos
-    vector<double> tH, tLS, tILS, tTS, tSA, tGRASP, tAG;
-    vector<double> cH, cLS, cILS, cTS, cSA, cGRASP, cAG;
+    vector<double> tH, tLS, tILS, tTS, tSA, /*tGRASP,*/ tAG;
+    int cH, cLS, cILS, cTS, cSA, /*cGRASP,*/ cAG;
 
     for (int iter = 0; iter < NUM_CORRIDAS; iter++)
     {
       // 1. HEURISTICA CONSTRUCTIVA (Base)
       vector<TBool> vars = vector<TBool>(datosFormula.first, TBool::Unknown);
       vector<Conteo> frecs = frecuenciasBase;
-      Formula problema(clausulasBase);
-
+      Formula problema(clausulasBase, datosFormula.first);
       auto start = chrono::high_resolution_clock::now();
       problema.solverConstructivo(vars, frecs); // Construimos solucion inicial
       auto end = chrono::high_resolution_clock::now();
-
-      double costoH = problema.calcularCosto(vars);
+      cH = problema.calcularCosto(vars);
       tH.push_back(chrono::duration<double>(end - start).count());
-      cH.push_back(costoH);
 
       // Copiamos la solucion de la heuristica para usarla en LS y en ILS por separado
       vector<TBool> varsParaLS = vars;
@@ -738,14 +868,14 @@ int main(int argc, char const *argv[])
       vector<TBool> varsParaSA = vars;
       // Usamos una copia limpia de las variables (GRASP construye su propia solución)
       vector<TBool> varsParaGRASP(datosFormula.first, TBool::Unknown);
+      vector<TBool> varsParaAG = vars;
 
       // 2. BUSQUEDA LOCAL
       start = chrono::high_resolution_clock::now();
       problema.busquedaLocal(varsParaLS);
       end = chrono::high_resolution_clock::now();
-
       tLS.push_back(chrono::duration<double>(end - start).count());
-      cLS.push_back(problema.calcularCosto(varsParaLS));
+      cLS = problema.calcularCosto(varsParaLS);
 
       // 3. BUSQUEDA LOCAL ITERADA
       start = chrono::high_resolution_clock::now();
@@ -753,106 +883,102 @@ int main(int argc, char const *argv[])
       end = chrono::high_resolution_clock::now();
 
       tILS.push_back(chrono::duration<double>(end - start).count());
-      cILS.push_back(problema.calcularCosto(varsParaILS));
+      cILS = problema.calcularCosto(varsParaILS);
 
       // 4. BUSQUEDA TABU
       start = chrono::high_resolution_clock::now();
       int tenure = 7 + (datosFormula.first / 10); // Ejemplo de tenure proporcional
-      problema.busquedaTabu(varsParaTS, 100, tenure); 
+      problema.busquedaTabu(varsParaTS, 100, tenure);
       end = chrono::high_resolution_clock::now();
-
       tTS.push_back(chrono::duration<double>(end - start).count());
-      cTS.push_back(problema.calcularCosto(varsParaTS));
+      cTS = problema.calcularCosto(varsParaTS);
 
       // 5. RECOCIDO SIMULADO
       start = chrono::high_resolution_clock::now();
-      // Parámetros sugeridos: temp inicial 10, enfriamiento 0.98, 100 iter por nivel
-      problema.recocidoSimulado(varsParaSA, gen, 10.0, 0.98, 100);
+      // Parámetros sugeridos: temp inicial 10, enfriamiento 0.98, 10 iter por nivel
+      problema.recocidoSimulado(varsParaSA, gen, 10.0, 0.98, 10);
       end = chrono::high_resolution_clock::now();
-
       tSA.push_back(chrono::duration<double>(end - start).count());
-      cSA.push_back(problema.calcularCosto(varsParaSA));
+      cSA = problema.calcularCosto(varsParaSA);
 
       // 6. GRASP
-      start = chrono::high_resolution_clock::now();
-      // Parámetros: 20 iteraciones, alpha = 0.2 (20% de aleatoriedad en RCL)
-      problema.busquedaGRASP(varsParaGRASP, 20, 0.2, gen, frecuenciasBase);
+      /*start = chrono::high_resolution_clock::now();
+      // Parámetros: 5 iteraciones, alpha = 0.2 (20% de aleatoriedad en RCL)
+      problema.busquedaGRASP(varsParaGRASP, 5, 0.2, gen, frecuenciasBase);
       end = chrono::high_resolution_clock::now();
 
       tGRASP.push_back(chrono::duration<double>(end - start).count());
-      cGRASP.push_back(problema.calcularCosto(varsParaGRASP));
+      cGRASP = problema.calcularCosto(varsParaGRASP);*/
 
       // 7. ALGORITMO GENÉTICO
-      vector<TBool> varsParaAG = vars; // Iniciamos con la solución de la constructiva
-      
       // Parámetros: Población=50, Generaciones=100, Cruce=0.85, Mutación=1.0/vars
-      double probMutacion = 1.0 / datosFormula.first; 
-      
+      double probMutacion = 1.0 / datosFormula.first;
+
       start = chrono::high_resolution_clock::now();
       problema.algoritmoGenetico(varsParaAG, 50, 100, 0.85, probMutacion, gen);
       end = chrono::high_resolution_clock::now();
 
       tAG.push_back(chrono::duration<double>(end - start).count());
-      cAG.push_back(problema.calcularCosto(varsParaAG));
+      cAG = problema.calcularCosto(varsParaAG);
     }
 
     // Promedios
-    double mCH = promedio(cH);
+    //double mCH = promedio(cH);
     double mTH = promedio(tH);
-    double mCLS = promedio(cLS);
+    //double mCLS = promedio(cLS);
     double mTLS = promedio(tLS);
-    double mCILS = promedio(cILS);
+    //double mCILS = promedio(cILS);
     double mTILS = promedio(tILS);
-    double mCTS = promedio(cTS);
+    //double mCTS = promedio(cTS);
     double mTTS = promedio(tTS);
-    double mCSA = promedio(cSA);
+    //double mCSA = promedio(cSA);
     double mTSA = promedio(tSA);
-    double mCGRASP = promedio(cGRASP);
-    double mTGRASP = promedio(tGRASP);
-    double mCAG = promedio(cAG);
+    /*//double mCGRASP = promedio(cGRASP);
+    double mTGRASP = promedio(tGRASP);*/
+    //double mCAG = promedio(cAG);
     double mTAG = promedio(tAG);
 
     // DesviacionesEstandar
-    double sdCH = desviacionEstandar(cH, mCH);
+    //double sdCH = desviacionEstandar(cH, mCH);
     double sdTH = desviacionEstandar(tH, mTH);
-    double sdCLS = desviacionEstandar(cLS, mCLS);
+    //double sdCLS = desviacionEstandar(cLS, mCLS);
     double sdTLS = desviacionEstandar(tLS, mTLS);
-    double sdCILS = desviacionEstandar(cILS, mCILS);
+    //double sdCILS = desviacionEstandar(cILS, mCILS);
     double sdTILS = desviacionEstandar(tILS, mTILS);
-    double sdCTS = desviacionEstandar(cTS, mCTS);
+    //double sdCTS = desviacionEstandar(cTS, mCTS);
     double sdTTS = desviacionEstandar(tTS, mTTS);
-    double sdCSA = desviacionEstandar(cSA, mCSA);
+    //double sdCSA = desviacionEstandar(cSA, mCSA);
     double sdTSA = desviacionEstandar(tSA, mTSA);
-    double sdCGRASP = desviacionEstandar(cGRASP, mCGRASP);
-    double sdTGRASP = desviacionEstandar(tGRASP, mTGRASP);
-    double sdCAG = desviacionEstandar(cAG, mCAG);
+    /*//double sdCGRASP = desviacionEstandar(cGRASP, mCGRASP);
+    double sdTGRASP = desviacionEstandar(tGRASP, mTGRASP);*/
+    //double sdCAG = desviacionEstandar(cAG, mCAG);
     double sdTAG = desviacionEstandar(tAG, mTAG);
 
     // Mejora total (Heuristica vs ILS)
-    double mejora = (mCH > 0) ? ((mCH - mCILS) / mCH) * 100.0 : 0.0;
+    //double mejora = (mCH > 0) ? ((mCH - mCILS) / mCH) * 100.0 : 0.0;*/
 
 #pragma omp critical
     {
       // cout << fixed << setprecision(2);
-      string nombreCorto = (nombreArchivo.length() > 33) ? "..." + nombreArchivo.substr(nombreArchivo.length() - 30) : nombreArchivo;
+      string nombreCorto = (nombreArchivo.length() > 16) ? "..." + nombreArchivo.substr(nombreArchivo.length() - 30) : nombreArchivo;
 
-      cout << left << setw(35) << nombreCorto
+      cout << left << setw(18) << nombreCorto
            << "| " << setw(9) << "-------- "
-           << "| " << setw(10) << formatearMedida(mCH, sdCH)
+           << "| " << setw(10) << cH //formatearMedida(int(mCH), int(sdCH))
            << "| " << setw(10) << formatearMedida(mTH, sdTH)
-           << "| " << setw(10) << formatearMedida(mCLS, sdCLS)
+           << "| " << setw(10) << cLS //formatearMedida(mCLS, sdCLS)
            << "| " << setw(10) << formatearMedida(mTLS, sdTLS)
-           << "| " << setw(11) << formatearMedida(mCILS, sdCILS)
+           << "| " << setw(11) << cILS //formatearMedida(mCILS, sdCILS)
            << "| " << setw(11) << formatearMedida(mTILS, sdTILS)
-           << "| " << setw(11) << formatearMedida(mCTS, sdCTS)
+           << "| " << setw(11) << cTS //formatearMedida(mCTS, sdCTS)
            << "| " << setw(11) << formatearMedida(mTTS, sdTTS)
-           << "| " << setw(11) << formatearMedida(mCSA, sdCSA)
+           << "| " << setw(11) << cSA //formatearMedida(mCSA, sdCSA)
            << "| " << setw(11) << formatearMedida(mTSA, sdTSA)
-           << "| " << setw(11) << formatearMedida(mCGRASP, sdCGRASP)
-           << "| " << setw(11) << formatearMedida(mTGRASP, sdTGRASP)
-           << "| " << setw(11) << formatearMedida(mCAG, sdCAG)
+           /*<< "| " << setw(11) << cGRASP //formatearMedida(mCGRASP, sdCGRASP)
+           << "| " << setw(11) << formatearMedida(mTGRASP, sdTGRASP)*/
+           << "| " << setw(11) << cAG //formatearMedida(mCAG, sdCAG)
            << "| " << setw(11) << formatearMedida(mTAG, sdTAG)
-           << "| " << setw(5) << mejora << "%" << endl;
+           /*<< "| " << setw(5) << mejora << "%"*/ << endl;
     }
   }
 
