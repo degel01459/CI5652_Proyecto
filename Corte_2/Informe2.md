@@ -14,6 +14,24 @@ Francisco Márquez (12-11163), Kevin Briceño (15-11661), Sergio Carrillo
 
 Fecha: 22/02/2026
 
+## Resumen
+El problema de satisficibilidad booleana (SAT) es el problema de saber si una
+fórmula en forma normal conjuntiva tiene una asignación de variables que la haga
+verdadera. El problema MaxSAT es la versión de optimización donde, la fórmula
+insatisfacible busca ser satisfecha en el máximo de cláusulas y tiene varias
+especializaciones. En este estudio se estudió el problema MaxSAT simple con el
+_benchmark **Causal Discovery**_ el cual contiene quince archivos de complejidad
+suficiente para probar distintas aproximaciones para la resolución del problema
+MaxSAT. Se probó una solución heurística voraz y se mejoraron las soluciones con
+metaheurísticas de búsqueda local: normal, iterada y tabú, recocido simulado,
+GRASP y un algoritmo genético. Se compararon las soluciones encontradas por los
+métodos propuestos con el solucionador exacto _EvalMaxSAT_ y se encontró que las
+soluciones encontradas por los métodos planteados, a pesar de no ser óptimas en
+términos de satisfacción de cláusulas, son competitivas en términos de tiempo.
+
+**Palabras clave**: satisfacción, heurística, metaheurística, solución exacta,
+óptimo.
+
 ## Introducción
 
 El problema de satisficibilidad booleana (SAT) es el problema de saber si una
@@ -121,7 +139,7 @@ La búsqueda local se sigue haciendo con 1-_flip_.
 La lista tabú, donde se tienen los movimientos que no están permitidos, es un
 vector que guarda las iteraciones en que una variable no puede ser invertida, es
 decir, la variable en la posición i-ésima, va a ser tabú durante la cantidad de
-iteraciones que indique el valor del vector en el índice i.
+iteraciones que indique el valor del vector en el índice i \[13\].
 
 Al comienzo, el costo de una solución se asume infinito y un movimiento se toma
 siempre y cuando mejore dicho costo (sea menor), por lo tanto, en la primera
@@ -150,14 +168,14 @@ posibles a esa temperatura, pero a diferencia de los vecinos explorados con la
 búsqueda tabú, aquí el vecino es seleccionado al azar. El criterio de aceptación
 viene por la probabilidad similar a la distribución de Boltzmann y si una
 solución candidata es mejor que lo que se tiene, se toma sin miramientos. Si no,
-la probabilidad de tomarla varía con la temperatura.
+la probabilidad de tomarla varía con la temperatura \[14\].
 
 ## GRASP: la lista restringida de mejores candidatos
 La función de costo consiste en seleccionar el máximo entre la cantidad de veces
 que una variable está negada o no (del mismo modo que en la solución heurística
 propuesta previamente). El umbral para entrar en la lista restringida de mejores
 candidatos se calcula con un factor $\alpha$ de 0,2. Esto satisface la condición
-voraz y aleatorizada.
+voraz y aleatorizada \[15\].
 
 La adaptatividad del algoritmo viene porque una vez seleccionada una parte de
 la solución, se actualizan las frecuencias asociadas a esa inclusión y entonces
@@ -170,7 +188,7 @@ de la población desde la solución heurística: el genotipo es la representaci�
 como vector de valores de las variables, donde el índice es la variable y el
 fenotipo es la representación global de la asignación como cadena binaria. La
 función de aptitud también está considerada y es justamente la cantidad de
-cláusulas insatisfechas.
+cláusulas insatisfechas \[16, 17\].
 
 Se implementaron los operadores de selección, cruce y mutación. El operador de
 selección de los padres es un torneo donde compiten tres candidatos de una
@@ -186,9 +204,11 @@ En la tabla 2 se muestran los resultados en número de cláusulas insatisfechas
 promedio de dos ejecuciones de cada archivo del _benchmark_. El número entre
 paréntesis corresponde a la desviación estándar sobre la última cifra
 significativa. Si no tiene número entre paréntesis es porque la calidad de la
-solución no varío con las repeticiones.
+solución no varío con las repeticiones. Los valores vacíos son resultados que no
+se pudieron obtener a tiempo para la fecha de entrega por el propio rendimiento
+del algoritmo frente a la instancia. \vspace{5cm}
 
-Tabla 2. Calidad de las soluciones por algoritmo
+**Tabla 2. Calidad de las soluciones por algoritmo**
 
 | Archivo | Casos | Exacto | Heurística | B. L. | B. L. I. | B. T. | R. S. | GRASP | A. G.     |
 |:-------:|:-----:|:------:|:----------:|:-----:|:--------:|:-----:|:-----:|:-----:|:---------:|
@@ -211,9 +231,21 @@ Tabla 2. Calidad de las soluciones por algoritmo
 
 En la tabla 3 se puede observar el tiempo en segundos que le tomó a cada
 algortimo con cada instancia del _benchmark_. El número entre paréntesis es la
-desviación estándar sobre la última cifra significativa.
+desviación estándar sobre la última cifra significativa. Los valores vacíos son
+resultados que no se pudieron obtener a tiempo para la fecha de entrega por el
+propio rendimiento del algoritmo frente a la instancia. Se puede observar que la
+implementación de diferentes algoritmos lleva a distintos tiempos de ejecución,
+también la diferencia con los tiempos se debe a que la estructura de las
+cláusulas es muy densa \[5\] en estos problemas (cada cláusula puede tener
+suficientes variables para actuar como un cuello de botella). Asimismo, para
+esta entrega los distintos algortimos fueron ejecutados en distintas máquinas lo
+que implica distinto poder de cómputo. Sin embargo, es notable que para la mayor
+parte de las heurísticas y metaheurísticas implementadas, si bien la calidad de
+la solución no es globalmente óptima, la diferencia en tiempo para obtenerlas
+plantea una ventana de oportunidad para estos algoritmos siempre y cuando no sea
+imprescindible una solución exacta del problema.
 
-Tabla 3. Tiempo de ejecución por algoritmo
+**Tabla 3. Tiempo de ejecución por algoritmo**
 
 | Archivo | Casos | Exacto | Heurística | B. L.    | B. L. I. | B. T.  | R. S.      | GRASP | A. G.   |
 |:-------:|:-----:|:------:|:----------:|:--------:|:--------:|:------:|:----------:|:-----:|:-------:|
@@ -225,20 +257,28 @@ Tabla 3. Tiempo de ejecución por algoritmo
 |  n6 i1  |  500  |        | 2(1)e2     | 2,6(9)e2 | 7(2)e3   | 4(1)   | 0.014(8)   |       | 6(1)e1  |
 |  n6 i4  |  500  |        | 0,2(1)     | 0,002(1) | 16(8)    | 0.3(1) | 0.003(2)   |       | 2.5(9)  |
 |  n6 i5  |  10k  |        | 2(1)e2     | 2,7(9)e2 | 7(2)e3   | 4(2)   | 0.016(6)   |       | 6(2)e1  |
-|  n6 i7  |  1k   | 118.155| 0,2(1)     | 0,003(2) | 2(1)e1   | 0.3(2) | 0.002(1)   |       | 2(1)    |
-|  n6 i8  |  1k   | 124.095| 0,2(1)     | 0,002(2) | 2(1)e1   | 0.3(1) | 0.0025(4)  |       | 2.5(9)  |
+|  n6 i7  |  1k   | 109.021| 0,2(1)     | 0,003(2) | 2(1)e1   | 0.3(2) | 0.002(1)   |       | 2(1)    |
+|  n6 i8  |  1k   | 109.691| 0,2(1)     | 0,002(2) | 2(1)e1   | 0.3(1) | 0.0025(4)  |       | 2.5(9)  |
 |  n6 i9  |  10k  |        | 0,2(1)     | 0,004(4) | 2(1)e1   | 0.3(1) | 0.002(1)   |       | 3(1)    |
 |  n6 i9  |  1k   |        | 0,2(1)     | 0,003(2) | 2(1)e1   | 0.2(2) | 0.002(1)   |       | 2(1)    |
 |  n7 i8  |  10k  | 253.064| 3(2)       | 0,01(1)  | 3,1(3)   | 1.5(2) | 0.005(1)   |       | 13(3)   |
 |  n7 i8  |  1k   | 260.345| 3(2)       | 0,01(1)  | 2,6(2)   | 1.1(5) | 0.004(1)   |       | 12(6)   |
 |  n7 i9  |  500  |        | 3(2)       | 0,02(2)  | 2,3(3)   | 1.1(5) | 0.003(1)   |       | 10(5)   |
 
-Se puede observar que la implementación de diferentes algoritmos lleva a
-distintos tiempos de ejecución, también la diferencia con los tiempos se debe a
-que la estructura de las cláusulas es muy densa \[5\] en estos problemas (cada
-cláusula puede tener suficientes variables para actuar como un cuello de
-botella). Asimismo, para esta entrega los distintos algortimos fueron ejecutados
-en distintas máquinas lo que implica distinto poder de cómputo.
+Asimismo, el incremento en la cantidad de algoritmos implementados y los
+parámetros a controlar para cada uno, sumado a la necesidad estadística de tener
+réplicas, plantea un cuello de botella ineludible en la cantidad de pruebas que
+se pueden realizar frente a los tiempos de entrega de los distintos avances.
+
+## Conclusiones
+
+Las soluciones encontradas por las heurísticas y metaheurísitcas planteadas, a
+pesar de no competir frente a un solucionador exacto en términos de calidad de
+la solución, compiten muy bien términos de rendimiento temporal.
+
+Se requieren muchas más ejecuciones y ensayos de parámetros para encontrar un
+conjunto de estos que genere el mejor balance entre tiempo de ejecución y la
+calidad de la solución.
 
 ## Referencias
 
@@ -284,3 +324,20 @@ Theoretical Computer Science, American Mathematical Society, 415-436.
 
 \[12\] Jeroslow, R. G., & Wang, J. (1990). _Solving propositional satisfiability
 problems_. Annals of mathematics and Artificial Intelligence, 1(1), 167-187.
+
+\[13\] Taillard, É. (1991). _Robust taboo search for the quadratic assignment
+problem_. Parallel computing, 17(4-5), 443-455.
+
+\[14\] Johnson, D. S., Aragon, C. R., McGeoch, L. A., & Schevon, C. (1989).
+_Optimization by simulated annealing: An experimental evaluation; part I, graph
+partitioning_. Operations research, 37(6), 865-892.
+
+\[15\] Feo, T. A., & Resende, M. G. (1995). _Greedy randomized adaptive search
+procedures_. Journal of global optimization, 6(2), 109-133.
+
+\[16\] Bäck, T. (1993, June). _Optimal mutation rates in genetic search_. In
+Proceedings of the 5th international conference on genetic algorithms (pp. 2-8).
+
+\[17\] Rana, S., & Whitley, D. (1998, September). _Genetic algorithm behavior in
+the MAXSAT domain_. In International Conference on Parallel Problem Solving from
+Nature (pp. 785-794). Berlin, Heidelberg: Springer Berlin Heidelberg.
