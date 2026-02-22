@@ -419,6 +419,7 @@ public:
                   double probabilidad = exp(-delta / T);
                   if (probDist(gen) < probabilidad)
                   {
+                      actual[idx] = (actual[idx] == TBool::True) ? TBool::False : TBool::True;
                       costoActual = nuevoCosto;
                   }
               }
@@ -960,7 +961,7 @@ int main(int argc, char const *argv[])
 #pragma omp critical
     {
       // cout << fixed << setprecision(2);
-      string nombreCorto = (nombreArchivo.length() > 16) ? "..." + nombreArchivo.substr(nombreArchivo.length() - 30) : nombreArchivo;
+      string nombreCorto = (nombreArchivo.length() > 16) ? "..." + nombreArchivo.substr(nombreArchivo.length() - 13) : nombreArchivo;
 
       cout << left << setw(18) << nombreCorto
            << "| " << setw(9) << "-------- "
