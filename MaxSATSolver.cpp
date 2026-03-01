@@ -926,7 +926,7 @@ int main(int argc, char const *argv[])
 
   // Encabezados ajustados para 3 metodos
   cout << left << setw(18) << "Archivo"
-       << "| " << setw(9) << "Exacto"
+       /*<< "| " << setw(9) << "Exacto"
        << "| " << setw(10) << "Costo H"
        << "| " << setw(10) << "T. H(s)"
        << "| " << setw(10) << "Costo LS"
@@ -938,9 +938,11 @@ int main(int argc, char const *argv[])
        << "| " << setw(11) << "Costo SA"
        << "| " << setw(11) << "T. SA(s)"
        /*<< "| " << setw(11) << "Costo GRASP"
-       << "| " << setw(11) << "T. GRASP(s)"*/
+       << "| " << setw(11) << "T. GRASP(s)"
        << "| " << setw(11) << "Costo AG"
-       << "| " << setw(11) << "T. AG(s)"
+       << "| " << setw(11) << "T. AG(s)"*/
+       << "| " << setw(11) << "Costo AM"
+       << "| " << setw(11) << "T. AM(s)"
        /*<< "| " << setw(6) << "Gap H-I%"*/ << endl;
   cout << "----------------------------------------------------------------------------------------------------------" << endl;
 
@@ -1009,17 +1011,17 @@ int main(int argc, char const *argv[])
       tH.push_back(chrono::duration<double>(end - start).count());
 
       // Copiamos la solucion de la heuristica para usarla en LS y en ILS por separado
-      vector<TBool> varsParaLS = vars;
+      /*vector<TBool> varsParaLS = vars;
       vector<TBool> varsParaILS = vars;
       vector<TBool> varsParaTS = vars;
       vector<TBool> varsParaSA = vars;
       // Usamos una copia limpia de las variables (GRASP construye su propia solución)
       vector<TBool> varsParaGRASP(datosFormula.first, TBool::Unknown);
-      vector<TBool> varsParaAG = vars;
+      vector<TBool> varsParaAG = vars;*/
       vector<TBool> varsParaAM = vars;
 
       // 2. BUSQUEDA LOCAL
-      start = chrono::high_resolution_clock::now();
+      /*start = chrono::high_resolution_clock::now();
       problema.busquedaLocal(varsParaLS);
       end = chrono::high_resolution_clock::now();
       tLS.push_back(chrono::duration<double>(end - start).count());
@@ -1056,7 +1058,7 @@ int main(int argc, char const *argv[])
       end = chrono::high_resolution_clock::now();
 
       tGRASP.push_back(chrono::duration<double>(end - start).count());
-      cGRASP = problema.calcularCosto(varsParaGRASP);*/
+      cGRASP = problema.calcularCosto(varsParaGRASP);
 
       // 7. ALGORITMO GENÉTICO
       // Parámetros: Población=50, Generaciones=100, Cruce=0.85, Mutación=1.0/vars
@@ -1067,7 +1069,7 @@ int main(int argc, char const *argv[])
       end = chrono::high_resolution_clock::now();
 
       tAG.push_back(chrono::duration<double>(end - start).count());
-      cAG = problema.calcularCosto(varsParaAG);
+      cAG = problema.calcularCosto(varsParaAG);*/
 
       // 8. ALGORITMO MEMÉTICO
       // Parámetros: Población=20, Torneo=2, Mutación=1.0/vars Parada=60s o 30 generaciones
@@ -1081,7 +1083,7 @@ int main(int argc, char const *argv[])
 
     // Promedios
     //double mCH = promedio(cH);
-    double mTH = promedio(tH);
+    /*double mTH = promedio(tH);
     //double mCLS = promedio(cLS);
     double mTLS = promedio(tLS);
     //double mCILS = promedio(cILS);
@@ -1090,15 +1092,15 @@ int main(int argc, char const *argv[])
     double mTTS = promedio(tTS);
     //double mCSA = promedio(cSA);
     double mTSA = promedio(tSA);
-    /*//double mCGRASP = promedio(cGRASP);
-    double mTGRASP = promedio(tGRASP);*/
+    //double mCGRASP = promedio(cGRASP);
+    double mTGRASP = promedio(tGRASP);
     //double mCAG = promedio(cAG);
-    double mTAG = promedio(tAG);
+    double mTAG = promedio(tAG);*/
     double mTAM = promedio(tAM);
 
     // DesviacionesEstandar
     //double sdCH = desviacionEstandar(cH, mCH);
-    double sdTH = desviacionEstandar(tH, mTH);
+    /*double sdTH = desviacionEstandar(tH, mTH);
     //double sdCLS = desviacionEstandar(cLS, mCLS);
     double sdTLS = desviacionEstandar(tLS, mTLS);
     //double sdCILS = desviacionEstandar(cILS, mCILS);
@@ -1107,10 +1109,10 @@ int main(int argc, char const *argv[])
     double sdTTS = desviacionEstandar(tTS, mTTS);
     //double sdCSA = desviacionEstandar(cSA, mCSA);
     double sdTSA = desviacionEstandar(tSA, mTSA);
-    /*//double sdCGRASP = desviacionEstandar(cGRASP, mCGRASP);
-    double sdTGRASP = desviacionEstandar(tGRASP, mTGRASP);*/
+    //double sdCGRASP = desviacionEstandar(cGRASP, mCGRASP);
+    double sdTGRASP = desviacionEstandar(tGRASP, mTGRASP);
     //double sdCAG = desviacionEstandar(cAG, mCAG);
-    double sdTAG = desviacionEstandar(tAG, mTAG);
+    double sdTAG = desviacionEstandar(tAG, mTAG);*/
     double sdTAM = desviacionEstandar(tAM, mTAM);
 
     // Mejora total (Heuristica vs ILS)
@@ -1122,7 +1124,7 @@ int main(int argc, char const *argv[])
       string nombreCorto = (nombreArchivo.length() > 16) ? "..." + nombreArchivo.substr(nombreArchivo.length() - 30) : nombreArchivo;
 
       cout << left << setw(18) << nombreCorto
-           << "| " << setw(9) << "-------- "
+           /*<< "| " << setw(9) << "-------- "
            << "| " << setw(10) << cH //formatearMedida(int(mCH), int(sdCH))
            << "| " << setw(10) << formatearMedida(mTH, sdTH)
            << "| " << setw(10) << cLS //formatearMedida(mCLS, sdCLS)
@@ -1134,9 +1136,9 @@ int main(int argc, char const *argv[])
            << "| " << setw(11) << cSA //formatearMedida(mCSA, sdCSA)
            << "| " << setw(11) << formatearMedida(mTSA, sdTSA)
            /*<< "| " << setw(11) << cGRASP //formatearMedida(mCGRASP, sdCGRASP)
-           << "| " << setw(11) << formatearMedida(mTGRASP, sdTGRASP)*/
+           << "| " << setw(11) << formatearMedida(mTGRASP, sdTGRASP)
            << "| " << setw(11) << cAG //formatearMedida(mCAG, sdCAG)
-           << "| " << setw(11) << formatearMedida(mTAG, sdTAG)
+           << "| " << setw(11) << formatearMedida(mTAG, sdTAG)*/
            << "| " << setw(11) << cAM //formatearMedida(mCAM, sdCAM)
            << "| " << setw(11) << formatearMedida(mTAM, sdTAM)
            /*<< "| " << setw(5) << mejora << "%"*/ << endl;
