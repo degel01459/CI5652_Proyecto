@@ -712,7 +712,7 @@ public:
       uniform_real_distribution<> probDist(0.0, 1.0);
       
       // Iniciar el reloj para el "Time-Boxing" (Comparación justa vs EvalMaxSAT)
-      auto tiempoInicio = high_resolution_clock::now();
+      auto tiempoInicio = chrono::high_resolution_clock::now();
 
       vector<vector<TBool>> poblacion(tamPoblacion, vector<TBool>(n));
       vector<int> costosPoblacion(tamPoblacion);
@@ -748,8 +748,8 @@ public:
       for (int genIdx = 0; genIdx < maxGeneraciones; genIdx++) {
           
           // 1. Criterio de Parada por TIEMPO (Corte de guillotina)
-          auto tiempoActual = high_resolution_clock::now();
-          duration<double> tiempoTranscurrido = tiempoActual - tiempoInicio;
+          auto tiempoActual = chrono::high_resolution_clock::now();
+          chrono::duration<double> tiempoTranscurrido = tiempoActual - tiempoInicio;
           if (tiempoTranscurrido.count() >= tiempoLimiteSegundos) {
               // Descomenta la siguiente línea si quieres ver el aviso en la consola
               // cout << "c [Memetico] Limite de tiempo de " << tiempoLimiteSegundos << "s alcanzado." << endl;
