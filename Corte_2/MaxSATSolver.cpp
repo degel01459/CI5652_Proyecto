@@ -682,6 +682,153 @@ public:
       // Retornar la mejor solución encontrada
       vars = mejorSolucionGlobal;
   }
+
+  // Función auxiliar: Selección por Torneo
+  int seleccionTorneo(const vector<int>& costosPoblacion, int k, mt19937 &gen) {
+    uniform_int_distribution<> distPoblacion(0, costosPoblacion.size() - 1);
+
+    int mejorIdx = distPoblacion(gen);
+    int mejorCosto = costosPoblacion[mejorIdx];
+
+    for (int i = 1; i < k; i++) {
+      int idx = distPoblacion(gen);
+      if (costosPoblacion[idx] < mejorCosto) {
+        mejorCosto = costosPoblacion[idx];
+        mejorIdx = idx;
+      }
+    }
+    return mejorIdx;
+  }
+
+  // Algoritmo Memético Principal
+  void algoritmoMemetico(vector<TBool> &vars, int tamPoblacion, int maxGeneraciones, double tiempoLimiteSegundos, int maxGeneracionesSinMejora, mt19937 &gen) 
+  {
+      int n = vars.size();
+
+      // Parámetros de excelencia basados en la literatura
+      double probMutacion = 1.0 / n; // Tasa de mutación ideal (1/N)
+      int k_torneo = 2;              // Torneo binario
+
+      uniform_real_distribution<> probDist(0.0, 1.0);
+      
+      // Iniciar el reloj para el "Time-Boxing" (Comparación justa vs EvalMaxSAT)
+      auto tiempoInicio = high_resolution_clock::now();
+
+      vector<vector<TBool>> poblacion(tamPoblacion, vector<TBool>(n));
+      vector<int> costosPoblacion(tamPoblacion);
+      
+      int mejorCostoGlobal = 1e9; // Empezamos en "infinito"
+      vector<TBool> mejorSolucionGlobal = vars;
+      int generacionesSinMejora = 0; // Contador para Early Stopping
+
+      // ==========================================
+      // FASE A: Inicialización de la Población
+      // ==========================================
+      for (int i = 0; i < tamPoblacion; i++) {
+          // Crear individuo aleatorio
+          for (int j = 0; j < n; j++) {
+              poblacion[i][j] = (probDist(gen) < 0.5) ? TBool::True : TBool::False;
+          }
+          
+          // ¡El toque memético! Bajamos el individuo al mínimo local antes de evaluar
+          busquedaLocal(poblacion[i]);
+          
+          costosPoblacion[i] = calcularCosto(poblacion[i]);
+          
+          // Registrar el mejor global
+          if (costosPoblacion[i] < mejorCostoGlobal) {
+              mejorCostoGlobal = costosPoblacion[i];
+              mejorSolucionGlobal = poblacion[i];
+          }
+      }
+
+      // ==========================================
+      // FASE B: Ciclo Evolutivo
+      // ==========================================
+      for (int genIdx = 0; genIdx < maxGeneraciones; genIdx++) {
+          
+          // 1. Criterio de Parada por TIEMPO (Corte de guillotina)
+          auto tiempoActual = high_resolution_clock::now();
+          duration<double> tiempoTranscurrido = tiempoActual - tiempoInicio;
+          if (tiempoTranscurrido.count() >= tiempoLimiteSegundos) {
+              // Descomenta la siguiente línea si quieres ver el aviso en la consola
+              // cout << "c [Memetico] Limite de tiempo de " << tiempoLimiteSegundos << "s alcanzado." << endl;
+              break; 
+          }
+
+          vector<vector<TBool>> nuevaPoblacion(tamPoblacion, vector<TBool>(n));
+          vector<int> nuevosCostos(tamPoblacion);
+
+          // 2. Elitismo Estricto: El mejor padre sobrevive siempre intacto
+          auto itMejor = min_element(costosPoblacion.begin(), costosPoblacion.end());
+          int idxMejorActual = distance(costosPoblacion.begin(), itMejor);
+          
+          nuevaPoblacion[0] = poblacion[idxMejorActual];
+          nuevosCostos[0] = costosPoblacion[idxMejorActual];
+
+          bool mejoraEnEstaGeneracion = false;
+
+          // 3. Reproducción (Llenar el resto de la nueva población)
+          for (int i = 1; i < tamPoblacion; i++) {
+              
+              // A. Selección
+              int p1 = seleccionTorneo(costosPoblacion, k_torneo, gen);
+              int p2 = seleccionTorneo(costosPoblacion, k_torneo, gen);
+
+              vector<TBool> hijo(n);
+              
+              // B. Cruce Uniforme y Mutación en un solo barrido (Optimizado para CPU)
+              for (int j = 0; j < n; j++) {
+                  // Cruce Uniforme (~50% de cada padre)
+                  if (probDist(gen) < 0.5) {
+                      hijo[j] = poblacion[p1][j];
+                  } else {
+                      hijo[j] = poblacion[p2][j];
+                  }
+
+                  // Mutación (Probabilidad muy baja: 1/N)
+                  if (probDist(gen) < probMutacion) {
+                      hijo[j] = (hijo[j] == TBool::True) ? TBool::False : TBool::True;
+                  }
+              }
+
+              // C. Búsqueda Local (El paso Memético que define al algoritmo)
+              busquedaLocal(hijo);
+              
+              // D. Evaluación
+              int costoHijo = calcularCosto(hijo);
+              nuevaPoblacion[i] = hijo;
+              nuevosCostos[i] = costoHijo;
+
+              // E. Revisar si hay nuevo récord histórico
+              if (costoHijo < mejorCostoGlobal) {
+                  mejorCostoGlobal = costoHijo;
+                  mejorSolucionGlobal = hijo;
+                  mejoraEnEstaGeneracion = true;
+              }
+          }
+
+          // 4. Reemplazo Generacional usando move() (Rápido y sin fugas de memoria)
+          poblacion = move(nuevaPoblacion);
+          costosPoblacion = move(nuevosCostos);
+
+          // 5. Criterio de Parada por EARLY STOPPING (Convergencia)
+          if (mejoraEnEstaGeneracion) {
+              generacionesSinMejora = 0; // Reiniciamos el contador si hubo éxito
+          } else {
+              generacionesSinMejora++;
+              if (generacionesSinMejora >= maxGeneracionesSinMejora) {
+                  // cout << "c [Memetico] Convergencia alcanzada. Sin mejoras por " << maxGeneracionesSinMejora << " generaciones." << endl;
+                  break; // Abortamos, ya estamos en un óptimo local del que no podemos salir
+              }
+          }
+      }
+
+      // ==========================================
+      // FASE C: Entrega de Resultados
+      // ==========================================
+      vars = mejorSolucionGlobal;
+  }
 };
 
 Clausula crearClausula(string linea, vector<Conteo> &frecuencias)
@@ -846,8 +993,8 @@ int main(int argc, char const *argv[])
     archivo.close();
 
     // Vectores para guardar promedios de los metodos
-    vector<double> tH, tLS, tILS, tTS, tSA, /*tGRASP,*/ tAG;
-    int cH, cLS, cILS, cTS, cSA, /*cGRASP,*/ cAG;
+    vector<double> tH, tLS, tILS, tTS, tSA, /*tGRASP,*/ tAG, tAM;
+    int cH, cLS, cILS, cTS, cSA, /*cGRASP,*/ cAG, cAM;
 
     for (int iter = 0; iter < NUM_CORRIDAS; iter++)
     {
@@ -869,6 +1016,7 @@ int main(int argc, char const *argv[])
       // Usamos una copia limpia de las variables (GRASP construye su propia solución)
       vector<TBool> varsParaGRASP(datosFormula.first, TBool::Unknown);
       vector<TBool> varsParaAG = vars;
+      vector<TBool> varsParaAM = vars;
 
       // 2. BUSQUEDA LOCAL
       start = chrono::high_resolution_clock::now();
@@ -920,6 +1068,15 @@ int main(int argc, char const *argv[])
 
       tAG.push_back(chrono::duration<double>(end - start).count());
       cAG = problema.calcularCosto(varsParaAG);
+
+      // 8. ALGORITMO MEMÉTICO
+      // Parámetros: Población=20, Torneo=2, Mutación=1.0/vars Parada=60s o 30 generaciones
+      start = chrono::high_resolution_clock::now();
+      problema.algoritmoMemetico(varsParaAM, 50, 1000, 60.0, 25, gen);
+      end = chrono::high_resolution_clock::now();
+
+      tAM.push_back(chrono::duration<double>(end - start).count());
+      cAM = problema.calcularCosto(varsParaAM);
     }
 
     // Promedios
@@ -937,6 +1094,7 @@ int main(int argc, char const *argv[])
     double mTGRASP = promedio(tGRASP);*/
     //double mCAG = promedio(cAG);
     double mTAG = promedio(tAG);
+    double mTAM = promedio(tAM);
 
     // DesviacionesEstandar
     //double sdCH = desviacionEstandar(cH, mCH);
@@ -953,6 +1111,7 @@ int main(int argc, char const *argv[])
     double sdTGRASP = desviacionEstandar(tGRASP, mTGRASP);*/
     //double sdCAG = desviacionEstandar(cAG, mCAG);
     double sdTAG = desviacionEstandar(tAG, mTAG);
+    double sdTAM = desviacionEstandar(tAM, mTAM);
 
     // Mejora total (Heuristica vs ILS)
     //double mejora = (mCH > 0) ? ((mCH - mCILS) / mCH) * 100.0 : 0.0;*/
@@ -978,6 +1137,8 @@ int main(int argc, char const *argv[])
            << "| " << setw(11) << formatearMedida(mTGRASP, sdTGRASP)*/
            << "| " << setw(11) << cAG //formatearMedida(mCAG, sdCAG)
            << "| " << setw(11) << formatearMedida(mTAG, sdTAG)
+           << "| " << setw(11) << cAM //formatearMedida(mCAM, sdCAM)
+           << "| " << setw(11) << formatearMedida(mTAM, sdTAM)
            /*<< "| " << setw(5) << mejora << "%"*/ << endl;
     }
   }
