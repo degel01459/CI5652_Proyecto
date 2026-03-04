@@ -700,134 +700,182 @@ public:
     return mejorIdx;
   }
 
-  // Algoritmo Memético Principal
-  void algoritmoMemetico(vector<TBool> &vars, int tamPoblacion, int maxGeneraciones, double tiempoLimiteSegundos, int maxGeneracionesSinMejora, mt19937 &gen) 
-  {
-      int n = vars.size();
+  // Búsqueda Local Optimizada (Next-Improvement)
+  void busquedaLocalM(vector<TBool> &vars) {
+    bool mejora = true;
+    int indexGuardado = 0; // Recordamos dónde nos quedamos
+    int n = vars.size();
 
-      // Parámetros de excelencia basados en la literatura
-      double probMutacion = 1.0 / n; // Tasa de mutación ideal (1/N)
-      int k_torneo = 2;              // Torneo binario
+    while (mejora) {
+      mejora = false;
+      for (int i = 0; i < n; i++) {
+        // Continuamos circularmente desde el último índice que modificamos
+        int varActual = (indexGuardado + i) % n; 
+        
+        int delta = evaluarFlip(vars, varActual);
+        if (delta < 0) {
+          vars[varActual] = (vars[varActual] == TBool::True) ? TBool::False : TBool::True;
+          mejora = true;
+          indexGuardado = varActual + 1; // Para la próxima, buscamos a partir de la siguiente
+          break; 
+        }
+      }
+    }
+  }
 
-      uniform_real_distribution<> probDist(0.0, 1.0);
-      
-      // Iniciar el reloj para el "Time-Boxing" (Comparación justa vs EvalMaxSAT)
-      auto tiempoInicio = chrono::high_resolution_clock::now();
+  // Algoritmo Memético Principal (Optimizado con Semilla y Control de Tiempo Seguro)
+  void algoritmoMemetico(vector<TBool> &vars, int tamPoblacion, int maxGeneraciones, double tiempoLimiteSegundos, int maxGeneracionesSinMejora, mt19937 &gen) {
+    int n = vars.size();
 
-      vector<vector<TBool>> poblacion(tamPoblacion, vector<TBool>(n));
-      vector<int> costosPoblacion(tamPoblacion);
-      
-      int mejorCostoGlobal = 1e9; // Empezamos en "infinito"
-      vector<TBool> mejorSolucionGlobal = vars;
-      int generacionesSinMejora = 0; // Contador para Early Stopping
+    // Parámetros de excelencia basados en la literatura
+    double probMutacion = 1.0 / n; // Tasa de mutación ideal (1/N)
+    int k_torneo = 2;              // Torneo binario
 
-      // ==========================================
-      // FASE A: Inicialización de la Población
-      // ==========================================
-      for (int i = 0; i < tamPoblacion; i++) {
-          // Crear individuo aleatorio
-          for (int j = 0; j < n; j++) {
-              poblacion[i][j] = (probDist(gen) < 0.5) ? TBool::True : TBool::False;
-          }
-          
-          // ¡El toque memético! Bajamos el individuo al mínimo local antes de evaluar
-          busquedaLocal(poblacion[i]);
-          
-          costosPoblacion[i] = calcularCosto(poblacion[i]);
-          
-          // Registrar el mejor global
-          if (costosPoblacion[i] < mejorCostoGlobal) {
-              mejorCostoGlobal = costosPoblacion[i];
-              mejorSolucionGlobal = poblacion[i];
-          }
+    uniform_real_distribution<> probDist(0.0, 1.0);
+    
+    // Iniciar el reloj para el "Time-Boxing"
+    auto tiempoInicio = chrono::high_resolution_clock::now();
+
+    // Usamos vectores dinámicos por si el tiempo nos corta la inicialización
+    vector<vector<TBool>> poblacion;
+    poblacion.reserve(tamPoblacion);
+    vector<int> costosPoblacion;
+    costosPoblacion.reserve(tamPoblacion);
+    
+    int mejorCostoGlobal = 1e9; 
+    vector<TBool> mejorSolucionGlobal = vars;
+    int generacionesSinMejora = 0;
+
+    // ==========================================
+    // FASE A: Inicialización de la Población
+    // ==========================================
+    
+    // 1. INYECCIÓN DE LA SEMILLA HEURÍSTICA
+    // Metemos la solución 'vars' original como el primer individuo de la población
+    poblacion.push_back(vars);
+    busquedaLocalM(poblacion[0]); // La mejoramos aún más
+    costosPoblacion.push_back(calcularCosto(poblacion[0]));
+    
+    mejorCostoGlobal = costosPoblacion[0];
+    mejorSolucionGlobal = poblacion[0];
+
+    // 2. Generar el resto de la población inicial (del 1 en adelante)
+    for (int i = 1; i < tamPoblacion; i++) {
+      // Seguro de tiempo: Si crear la población inicial está tardando demasiado,
+      // abortamos la creación y trabajamos solo con los individuos que ya tenemos.
+      auto tiempoAct = chrono::high_resolution_clock::now();
+      if (chrono::duration<double>(tiempoAct - tiempoInicio).count() >= tiempoLimiteSegundos) {
+        tamPoblacion = poblacion.size(); // Ajustamos el tamaño oficial
+        break; 
       }
 
-      // ==========================================
-      // FASE B: Ciclo Evolutivo
-      // ==========================================
-      for (int genIdx = 0; genIdx < maxGeneraciones; genIdx++) {
-          
-          // 1. Criterio de Parada por TIEMPO (Corte de guillotina)
-          auto tiempoActual = chrono::high_resolution_clock::now();
-          chrono::duration<double> tiempoTranscurrido = tiempoActual - tiempoInicio;
-          if (tiempoTranscurrido.count() >= tiempoLimiteSegundos) {
-              // Descomenta la siguiente línea si quieres ver el aviso en la consola
-              // cout << "c [Memetico] Limite de tiempo de " << tiempoLimiteSegundos << "s alcanzado." << endl;
-              break; 
-          }
-
-          vector<vector<TBool>> nuevaPoblacion(tamPoblacion, vector<TBool>(n));
-          vector<int> nuevosCostos(tamPoblacion);
-
-          // 2. Elitismo Estricto: El mejor padre sobrevive siempre intacto
-          auto itMejor = min_element(costosPoblacion.begin(), costosPoblacion.end());
-          int idxMejorActual = distance(costosPoblacion.begin(), itMejor);
-          
-          nuevaPoblacion[0] = poblacion[idxMejorActual];
-          nuevosCostos[0] = costosPoblacion[idxMejorActual];
-
-          bool mejoraEnEstaGeneracion = false;
-
-          // 3. Reproducción (Llenar el resto de la nueva población)
-          for (int i = 1; i < tamPoblacion; i++) {
-              
-              // A. Selección
-              int p1 = seleccionTorneo(costosPoblacion, k_torneo, gen);
-              int p2 = seleccionTorneo(costosPoblacion, k_torneo, gen);
-
-              vector<TBool> hijo(n);
-              
-              // B. Cruce Uniforme y Mutación en un solo barrido (Optimizado para CPU)
-              for (int j = 0; j < n; j++) {
-                  // Cruce Uniforme (~50% de cada padre)
-                  if (probDist(gen) < 0.5) {
-                      hijo[j] = poblacion[p1][j];
-                  } else {
-                      hijo[j] = poblacion[p2][j];
-                  }
-
-                  // Mutación (Probabilidad muy baja: 1/N)
-                  if (probDist(gen) < probMutacion) {
-                      hijo[j] = (hijo[j] == TBool::True) ? TBool::False : TBool::True;
-                  }
-              }
-
-              // C. Búsqueda Local (El paso Memético que define al algoritmo)
-              busquedaLocal(hijo);
-              
-              // D. Evaluación
-              int costoHijo = calcularCosto(hijo);
-              nuevaPoblacion[i] = hijo;
-              nuevosCostos[i] = costoHijo;
-
-              // E. Revisar si hay nuevo récord histórico
-              if (costoHijo < mejorCostoGlobal) {
-                  mejorCostoGlobal = costoHijo;
-                  mejorSolucionGlobal = hijo;
-                  mejoraEnEstaGeneracion = true;
-              }
-          }
-
-          // 4. Reemplazo Generacional usando move() (Rápido y sin fugas de memoria)
-          poblacion = move(nuevaPoblacion);
-          costosPoblacion = move(nuevosCostos);
-
-          // 5. Criterio de Parada por EARLY STOPPING (Convergencia)
-          if (mejoraEnEstaGeneracion) {
-              generacionesSinMejora = 0; // Reiniciamos el contador si hubo éxito
-          } else {
-              generacionesSinMejora++;
-              if (generacionesSinMejora >= maxGeneracionesSinMejora) {
-                  // cout << "c [Memetico] Convergencia alcanzada. Sin mejoras por " << maxGeneracionesSinMejora << " generaciones." << endl;
-                  break; // Abortamos, ya estamos en un óptimo local del que no podemos salir
-              }
-          }
+      // Crear individuo aleatorio
+      vector<TBool> nuevoIndividuo(n);
+      for (int j = 0; j < n; j++) {
+        nuevoIndividuo[j] = (probDist(gen) < 0.5) ? TBool::True : TBool::False;
       }
+      
+      // ¡El toque memético inicial!
+      busquedaLocalM(nuevoIndividuo);
+      int costoIndividuo = calcularCosto(nuevoIndividuo);
+      
+      poblacion.push_back(nuevoIndividuo);
+      costosPoblacion.push_back(costoIndividuo);
+      
+      // Registrar el mejor global
+      if (costoIndividuo < mejorCostoGlobal) {
+        mejorCostoGlobal = costoIndividuo;
+        mejorSolucionGlobal = nuevoIndividuo;
+      }
+    }
 
-      // ==========================================
-      // FASE C: Entrega de Resultados
-      // ==========================================
+    // Si por falta de tiempo solo pudimos generar 1 individuo, abortamos el genético
+    if (tamPoblacion < 2) {
       vars = mejorSolucionGlobal;
+      return;
+    }
+
+    // ==========================================
+    // FASE B: Ciclo Evolutivo
+    // ==========================================
+    for (int genIdx = 0; genIdx < maxGeneraciones; genIdx++) {
+      // 1. Criterio de Parada por TIEMPO
+      auto tiempoActual = chrono::high_resolution_clock::now();
+      chrono::duration<double> tiempoTranscurrido = tiempoActual - tiempoInicio;
+      if (tiempoTranscurrido.count() >= tiempoLimiteSegundos) {
+        break; 
+      }
+
+      vector<vector<TBool>> nuevaPoblacion(tamPoblacion, vector<TBool>(n));
+      vector<int> nuevosCostos(tamPoblacion);
+
+      // 2. Elitismo Estricto: El mejor padre sobrevive siempre intacto
+      auto itMejor = min_element(costosPoblacion.begin(), costosPoblacion.end());
+      int idxMejorActual = distance(costosPoblacion.begin(), itMejor);
+      
+      nuevaPoblacion[0] = poblacion[idxMejorActual];
+      nuevosCostos[0] = costosPoblacion[idxMejorActual];
+
+      bool mejoraEnEstaGeneracion = false;
+
+      // 3. Reproducción (Llenar el resto de la nueva población)
+      for (int i = 1; i < tamPoblacion; i++) {
+        // A. Selección
+        int p1 = seleccionTorneo(costosPoblacion, k_torneo, gen);
+        int p2 = seleccionTorneo(costosPoblacion, k_torneo, gen);
+
+        vector<TBool> hijo(n);
+        
+        // B. Cruce Uniforme y Mutación en un solo barrido
+        for (int j = 0; j < n; j++) {
+          // Cruce Uniforme
+          if (probDist(gen) < 0.5) {
+            hijo[j] = poblacion[p1][j];
+          } else {
+            hijo[j] = poblacion[p2][j];
+          }
+
+          // Mutación
+          if (probDist(gen) < probMutacion) {
+            hijo[j] = (hijo[j] == TBool::True) ? TBool::False : TBool::True;
+          }
+        }
+
+        // C. Búsqueda Local (El paso Memético que define al algoritmo)
+        busquedaLocalM(hijo);
+        
+        // D. Evaluación
+        int costoHijo = calcularCosto(hijo);
+        nuevaPoblacion[i] = hijo;
+        nuevosCostos[i] = costoHijo;
+
+        // E. Revisar si hay nuevo récord histórico
+        if (costoHijo < mejorCostoGlobal) {
+          mejorCostoGlobal = costoHijo;
+          mejorSolucionGlobal = hijo;
+          mejoraEnEstaGeneracion = true;
+        }
+      }
+
+      // 4. Reemplazo Generacional usando move()
+      poblacion = move(nuevaPoblacion);
+      costosPoblacion = move(nuevosCostos);
+
+      // 5. Criterio de Parada por EARLY STOPPING
+      if (mejoraEnEstaGeneracion) {
+        generacionesSinMejora = 0; 
+      } else {
+        generacionesSinMejora++;
+        if (generacionesSinMejora >= maxGeneracionesSinMejora) {
+          break; 
+        }
+      }
+    }
+
+    // ==========================================
+    // FASE C: Entrega de Resultados
+    // ==========================================
+    vars = mejorSolucionGlobal;
   }
 };
 
