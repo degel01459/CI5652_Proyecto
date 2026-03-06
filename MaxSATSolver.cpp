@@ -23,7 +23,7 @@
 using namespace std;
 
 // Configuración
-const int NUM_CORRIDAS = 1;
+const int NUM_CORRIDAS = 30;
 
 enum class TBool : int8_t
 {
@@ -710,7 +710,8 @@ public:
       mejora = false;
       for (int i = 0; i < n; i++) {
         // Continuamos circularmente desde el último índice que modificamos
-        int varActual = (indexGuardado + i) % n; 
+        int varActual = indexGuardado + i;
+        if (varActual >= n) varActual -= n;
         
         int delta = evaluarFlip(vars, varActual);
         if (delta < 0) {
@@ -877,6 +878,332 @@ public:
     // ==========================================
     vars = mejorSolucionGlobal;
   }
+
+  // Función auxiliar: Calcula la distancia Hamming (cuántas variables son diferentes)
+  int distanciaHamming(const vector<TBool>& a, const vector<TBool>& b) {
+    int dist = 0;
+    for (size_t i = 0; i < a.size(); i++) {
+      if (a[i] != b[i]) dist++;
+    }
+    return dist;
+  }
+
+  // Operador de Combinación: Reenlazado de Caminos (Path Relinking) bidireccional
+  // Traza un camino desde 'inicial' hasta 'guia', cambiando un bit a la vez.
+  vector<TBool> pathRelinking(const vector<TBool>& inicial, const vector<TBool>& guia, int& mejorCostoRuta, mt19937& gen) {
+    vector<TBool> actual = inicial;
+    vector<TBool> mejorSolucion = inicial;
+    mejorCostoRuta = calcularCosto(actual);
+    
+    // Identificamos las posiciones donde difieren (los pasos que debemos dar)
+    vector<int> diferencias;
+    for (size_t i = 0; i < actual.size(); i++) {
+      if (actual[i] != guia[i]) {
+        diferencias.push_back(i);
+      }
+    }
+
+    // Barajamos el orden de los pasos para que el camino sea diferente si se repite
+    shuffle(diferencias.begin(), diferencias.end(), gen);
+
+    int costoActual = mejorCostoRuta;
+
+    // Caminamos hacia la guía (nos detenemos un paso antes para no llegar a ser exactamente la guía)
+    for (size_t i = 0; i < diferencias.size() - 1; i++) {
+      int flipIdx = diferencias[i];
+      
+      // Evaluamos el costo de dar este paso (flip)
+      // Usar evaluarFlip es mucho más rápido que calcularCosto desde cero
+      int delta = evaluarFlip(actual, flipIdx);
+      costoActual += delta;
+      
+      // Damos el paso
+      actual[flipIdx] = guia[flipIdx];
+
+      // Si encontramos una mejor solución en el camino intermedio, la guardamos
+      if (costoActual < mejorCostoRuta) {
+        mejorCostoRuta = costoActual;
+        mejorSolucion = actual;
+      }
+    }
+
+    return mejorSolucion;
+  }
+
+  // Algoritmo: Búsqueda Dispersa (Scatter Search) con Path Relinking
+  void busquedaDispersa(vector<TBool> &vars, int tamRefSet, double tiempoLimiteSegundos, mt19937 &gen) {
+    int n = vars.size();
+    auto tiempoInicio = chrono::high_resolution_clock::now();
+    uniform_real_distribution<> probDist(0.0, 1.0);
+
+    // El Reference Set (RefSet) guarda las mejores y más diversas soluciones
+    vector<vector<TBool>> refSet;
+    vector<int> costosRefSet;
+    
+    int mejorCostoGlobal = 1e9;
+    vector<TBool> mejorSolucionGlobal = vars;
+
+    // ==========================================
+    // FASE A: Construcción Inicial del RefSet
+    // ==========================================
+    
+    // 1. Inyectamos la semilla heurística
+    refSet.push_back(vars);
+    busquedaLocalM(refSet[0]);
+    costosRefSet.push_back(calcularCosto(refSet[0]));
+    mejorCostoGlobal = costosRefSet[0];
+    mejorSolucionGlobal = refSet[0];
+
+    // 2. Llenamos el resto del RefSet inicial con soluciones aleatorias + Búsqueda Local
+    for (int i = 1; i < tamRefSet; i++) {
+      auto tiempoAct = chrono::high_resolution_clock::now();
+      if (chrono::duration<double>(tiempoAct - tiempoInicio).count() >= tiempoLimiteSegundos) {
+        tamRefSet = refSet.size();
+        break; 
+      }
+
+      vector<TBool> nuevo(n);
+      for (int j = 0; j < n; j++) {
+        nuevo[j] = (probDist(gen) < 0.5) ? TBool::True : TBool::False;
+      }
+      
+      busquedaLocalM(nuevo);
+      int costoNuevo = calcularCosto(nuevo);
+      
+      // Solo lo añadimos si es distinto a los que ya existen (Mantener diversidad es vital en SS)
+      bool esDuplicado = false;
+      for (const auto& existente : refSet) {
+        if (distanciaHamming(nuevo, existente) == 0) {
+          esDuplicado = true;
+          break;
+        }
+      }
+
+      if (!esDuplicado) {
+        refSet.push_back(nuevo);
+        costosRefSet.push_back(costoNuevo);
+        if (costoNuevo < mejorCostoGlobal) {
+          mejorCostoGlobal = costoNuevo;
+          mejorSolucionGlobal = nuevo;
+        }
+      } else {
+        i--; // Si es duplicado, reintentamos
+      }
+    }
+
+    vector<bool> esNuevo(tamRefSet, true); 
+
+    // ==========================================
+    // FASE B: Ciclo de Combinación Sistémica
+    // ==========================================
+    bool refSetCambio = true;
+    
+    while (refSetCambio) {
+      refSetCambio = false;
+
+      // Control de tiempo en el bucle principal
+      auto tiempoActual = chrono::high_resolution_clock::now();
+      if (chrono::duration<double>(tiempoActual - tiempoInicio).count() >= tiempoLimiteSegundos) break;
+
+      vector<vector<TBool>> nuevosCandidatos;
+      vector<int> costosCandidatos;
+
+      // Generar combinaciones de TODOS los pares posibles en el RefSet
+      for (int i = 0; i < tamRefSet; i++) {
+        for (int j = i + 1; j < tamRefSet; j++) {
+          
+          // Seguro de tiempo interno por si los pares tardan mucho
+          auto tCheck = chrono::high_resolution_clock::now();
+          if (chrono::duration<double>(tCheck - tiempoInicio).count() >= tiempoLimiteSegundos) goto FIN_CICLO;
+
+          // Path Relinking (i -> j)
+          int costoPR1;
+          vector<TBool> hijo1 = pathRelinking(refSet[i], refSet[j], costoPR1, gen);
+          busquedaLocalM(hijo1); // Mejora memética sobre el punto intermedio encontrado
+          costoPR1 = calcularCosto(hijo1);
+          
+          nuevosCandidatos.push_back(hijo1);
+          costosCandidatos.push_back(costoPR1);
+
+          // Path Relinking inverso (j -> i) - Produce caminos diferentes
+          int costoPR2;
+          vector<TBool> hijo2 = pathRelinking(refSet[j], refSet[i], costoPR2, gen);
+          busquedaLocalM(hijo2);
+          costoPR2 = calcularCosto(hijo2);
+          
+          nuevosCandidatos.push_back(hijo2);
+          costosCandidatos.push_back(costoPR2);
+        }
+      }
+
+  FIN_CICLO:
+      
+      // ==========================================
+      // FASE C: Actualización del RefSet
+      // ==========================================
+      // Intentamos ingresar a los hijos en el RefSet si son mejores y no están duplicados
+      for (size_t c = 0; c < nuevosCandidatos.size(); c++) {
+        
+        // Actualizar el mejor global
+        if (costosCandidatos[c] < mejorCostoGlobal) {
+          mejorCostoGlobal = costosCandidatos[c];
+          mejorSolucionGlobal = nuevosCandidatos[c];
+        }
+
+        // Encontrar la peor solución en el RefSet actual
+        auto itPeor = max_element(costosRefSet.begin(), costosRefSet.end());
+        int idxPeor = distance(costosRefSet.begin(), itPeor);
+
+        // Si el candidato es mejor que el peor del RefSet
+        if (costosCandidatos[c] < costosRefSet[idxPeor]) {
+          // Verificar que no sea un clon de nadie en el RefSet
+          bool esDuplicado = false;
+          for (const auto& existente : refSet) {
+            if (distanciaHamming(nuevosCandidatos[c], existente) == 0) {
+              esDuplicado = true;
+              break;
+            }
+          }
+
+          if (!esDuplicado) {
+            // Reemplazamos al peor con nuestro nuevo candidato
+            refSet[idxPeor] = nuevosCandidatos[c];
+            costosRefSet[idxPeor] = costosCandidatos[c];
+            refSetCambio = true; // El set cambió, seguimos iterando
+          }
+        }
+      }
+    } // Fin del while(refSetCambio)
+
+    // ==========================================
+    // FASE D: Entrega de Resultados
+    // ==========================================
+    vars = mejorSolucionGlobal;
+  }
+
+  // Algoritmo: Optimización por Colonia de Hormigas (ACO Elitista Híbrido)
+  void optimizacionColoniaHormigas(vector<TBool> &vars, int numHormigas, double alpha, double beta, double rho, double tiempoLimiteSegundos, mt19937 &gen) {
+    int n = vars.size();
+    auto tiempoInicio = chrono::high_resolution_clock::now();
+    uniform_real_distribution<> probDist(0.0, 1.0);
+
+    // ==========================================
+    // FASE A: Inicialización de Heurística y Feromonas
+    // ==========================================
+    
+    // 1. Matriz Heurística (eta) y Pre-cálculo de potencias (eta_beta)
+    vector<vector<double>> eta(n, vector<double>(2, 1.0));
+    vector<vector<double>> eta_beta(n, vector<double>(2, 1.0));
+    
+    // Conectamos con las cláusulas reales de la clase Formula
+    for (const auto& c : clausulas) {
+      for (int literal : c.getVariables()) {
+        if (literal < 0) eta[abs(literal) - 1][0] += 1.0; // Aparición negativa
+        else eta[abs(literal) - 1][1] += 1.0;            // Aparición positiva
+      }
+    }
+
+    // ¡OPTIMIZACIÓN CRÍTICA!: Precalculamos eta^beta fuera del bucle
+    for (int i = 0; i < n; i++) {
+        eta_beta[i][0] = pow(eta[i][0], beta);
+        eta_beta[i][1] = pow(eta[i][1], beta);
+    }
+
+    // 2. Matriz de Feromonas (tau)
+    double tau0 = 1.0; 
+    vector<vector<double>> tau(n, vector<double>(2, tau0));
+
+    int mejorCostoGlobal = 1e9;
+    vector<TBool> mejorSolucionGlobal = vars;
+
+    busquedaLocalM(mejorSolucionGlobal);
+    mejorCostoGlobal = calcularCosto(mejorSolucionGlobal);
+
+    // ==========================================
+    // FASE B: Ciclo de Forrajeo de la Colonia
+    // ==========================================
+    double factorEvaporacion = 1.0 - rho; 
+    
+    // 1. OPTIMIZACIÓN DE MEMORIA: Declarar los vectores FUERA del ciclo
+    vector<vector<TBool>> solucionesHormigas(numHormigas, vector<TBool>(n));
+    vector<int> costosHormigas(numHormigas);
+
+    // 2. CONTROL DE CONVERGENCIA
+    int iteracionesSinMejora = 0;
+    int maxIteracionesSinMejora = 30; // Si pasan 30 iteraciones sin romper el récord, paramos.
+
+    while (true) {
+      // Condición de parada por tiempo
+      auto tiempoActual = chrono::high_resolution_clock::now();
+      if (chrono::duration<double>(tiempoActual - tiempoInicio).count() >= tiempoLimiteSegundos) {
+        break;
+      }
+
+      bool mejoraEnEstaIteracion = false;
+      
+      for (int h = 0; h < numHormigas; h++) {
+        auto tHormiga = chrono::high_resolution_clock::now();
+        if (chrono::duration<double>(tHormiga - tiempoInicio).count() >= tiempoLimiteSegundos) break;
+
+        for (int i = 0; i < n; i++) {
+          double valTauFalse = (alpha == 1.0) ? tau[i][0] : pow(tau[i][0], alpha);
+          double valTauTrue  = (alpha == 1.0) ? tau[i][1] : pow(tau[i][1], alpha);
+
+          double pesoFalse = valTauFalse * eta_beta[i][0];
+          double pesoTrue  = valTauTrue * eta_beta[i][1];
+          
+          double sumaTotal = pesoFalse + pesoTrue;
+          double umbralAleatorio = probDist(gen);
+
+          if (umbralAleatorio <= (pesoFalse / sumaTotal)) {
+            solucionesHormigas[h][i] = TBool::False;
+          } else {
+            solucionesHormigas[h][i] = TBool::True;
+          }
+        }
+
+        busquedaLocalM(solucionesHormigas[h]);
+        costosHormigas[h] = calcularCosto(solucionesHormigas[h]);
+
+        if (costosHormigas[h] < mejorCostoGlobal) {
+          mejorCostoGlobal = costosHormigas[h];
+          mejorSolucionGlobal = solucionesHormigas[h];
+          mejoraEnEstaIteracion = true; // ¡Registramos que rompimos el récord!
+        }
+      }
+
+      // 3. REVISIÓN DE CONVERGENCIA (Early Stopping)
+      if (mejoraEnEstaIteracion) {
+          iteracionesSinMejora = 0; // Se reinicia el contador si hay éxito
+      } else {
+          iteracionesSinMejora++;
+          if (iteracionesSinMejora >= maxIteracionesSinMejora) {
+              break; // ¡Abortamos! La colonia ya convergió y es inútil seguir.
+          }
+      }
+      
+      // 3.1 Evaporación Global 
+      for (int i = 0; i < n; i++) {
+        tau[i][0] *= factorEvaporacion;
+        tau[i][1] *= factorEvaporacion;
+        
+        if (tau[i][0] < 0.001) tau[i][0] = 0.001;
+        if (tau[i][1] < 0.001) tau[i][1] = 0.001;
+      }
+
+      // 3.2 Depósito Elitista 
+      double deltaTau = 100.0 / (mejorCostoGlobal + 1.0); 
+      for (int i = 0; i < n; i++) {
+        if (mejorSolucionGlobal[i] == TBool::False) {
+          tau[i][0] += deltaTau;
+        } else {
+          tau[i][1] += deltaTau;
+        }
+      }
+    }
+
+    vars = mejorSolucionGlobal;
+  }
 };
 
 Clausula crearClausula(string linea, vector<Conteo> &frecuencias)
@@ -988,9 +1315,11 @@ int main(int argc, char const *argv[])
        /*<< "| " << setw(11) << "Costo GRASP"
        << "| " << setw(11) << "T. GRASP(s)"
        << "| " << setw(11) << "Costo AG"
-       << "| " << setw(11) << "T. AG(s)"*/
+       << "| " << setw(11) << "T. AG(s)"
        << "| " << setw(11) << "Costo AM"
-       << "| " << setw(11) << "T. AM(s)"
+       << "| " << setw(11) << "T. AM(s)"*/
+       << "| " << setw(11) << "Costo SS"
+       << "| " << setw(11) << "T. SS(s)"
        /*<< "| " << setw(6) << "Gap H-I%"*/ << endl;
   cout << "----------------------------------------------------------------------------------------------------------" << endl;
 
@@ -1043,8 +1372,8 @@ int main(int argc, char const *argv[])
     archivo.close();
 
     // Vectores para guardar promedios de los metodos
-    vector<double> tH, tLS, tILS, tTS, tSA, /*tGRASP,*/ tAG, tAM;
-    int cH, cLS, cILS, cTS, cSA, /*cGRASP,*/ cAG, cAM;
+    vector<double> tH, tLS, tILS, tTS, tSA, /*tGRASP,*/ tAG, tAM, tSS, tACO;
+    int cH, cLS, cILS, cTS, cSA, /*cGRASP,*/ cAG, cAM, cSS, cACO;
 
     for (int iter = 0; iter < NUM_CORRIDAS; iter++)
     {
@@ -1065,8 +1394,10 @@ int main(int argc, char const *argv[])
       vector<TBool> varsParaSA = vars;
       // Usamos una copia limpia de las variables (GRASP construye su propia solución)
       vector<TBool> varsParaGRASP(datosFormula.first, TBool::Unknown);
-      vector<TBool> varsParaAG = vars;*/
+      vector<TBool> varsParaAG = vars;
       vector<TBool> varsParaAM = vars;
+      vector<TBool> varsParaSS = vars;*/
+      vector<TBool> varsParaACO = vars;
 
       // 2. BUSQUEDA LOCAL
       /*start = chrono::high_resolution_clock::now();
@@ -1087,7 +1418,7 @@ int main(int argc, char const *argv[])
       start = chrono::high_resolution_clock::now();
       int tenure = 7 + (datosFormula.first / 10); // Ejemplo de tenure proporcional
       problema.busquedaTabu(varsParaTS, 100, tenure);
-      end = chrono::high_resolution_clock::now();
+      end* = chrono::high_resolution_clock::now();
       tTS.push_back(chrono::duration<double>(end - start).count());
       cTS = problema.calcularCosto(varsParaTS);
 
@@ -1117,7 +1448,7 @@ int main(int argc, char const *argv[])
       end = chrono::high_resolution_clock::now();
 
       tAG.push_back(chrono::duration<double>(end - start).count());
-      cAG = problema.calcularCosto(varsParaAG);*/
+      cAG = problema.calcularCosto(varsParaAG);
 
       // 8. ALGORITMO MEMÉTICO
       // Parámetros: Población=20, Torneo=2, Mutación=1.0/vars Parada=60s o 30 generaciones
@@ -1127,6 +1458,25 @@ int main(int argc, char const *argv[])
 
       tAM.push_back(chrono::duration<double>(end - start).count());
       cAM = problema.calcularCosto(varsParaAM);
+
+      // 9. BÚSQUEDA DISPERSA
+      // Parámetros: tamRefSet=10; maxSegundos = 60.0
+      start = chrono::high_resolution_clock::now();
+      problema.busquedaDispersa(varsParaSS, 10, 60.0, gen);
+      end = chrono::high_resolution_clock::now();
+
+      tSS.push_back(chrono::duration<double>(end - start).count());
+      cSS = problema.calcularCosto(varsParaSS);*/
+
+      // 10. COLONIA DE HORMIGAS
+      // Parámetros numHormigas=10, alpha = 1.0, beta = 2.0, rho = 0.1, maxSegundos = 60.0;
+
+      start = chrono::high_resolution_clock::now();
+      problema.optimizacionColoniaHormigas(varsParaACO, 10, 1.0, 2.0, 0.1, 60.0, gen);
+      end = chrono::high_resolution_clock::now();
+
+      tACO.push_back(chrono::duration<double>(end - start).count());
+      cACO = problema.calcularCosto(varsParaACO);
     }
 
     // Promedios
@@ -1143,8 +1493,10 @@ int main(int argc, char const *argv[])
     //double mCGRASP = promedio(cGRASP);
     double mTGRASP = promedio(tGRASP);
     //double mCAG = promedio(cAG);
-    double mTAG = promedio(tAG);*/
+    double mTAG = promedio(tAG);
     double mTAM = promedio(tAM);
+    double mTSS = promedio(tSS);*/
+    double mTACO = promedio(tACO);
 
     // DesviacionesEstandar
     //double sdCH = desviacionEstandar(cH, mCH);
@@ -1160,8 +1512,10 @@ int main(int argc, char const *argv[])
     //double sdCGRASP = desviacionEstandar(cGRASP, mCGRASP);
     double sdTGRASP = desviacionEstandar(tGRASP, mTGRASP);
     //double sdCAG = desviacionEstandar(cAG, mCAG);
-    double sdTAG = desviacionEstandar(tAG, mTAG);*/
+    double sdTAG = desviacionEstandar(tAG, mTAG);
     double sdTAM = desviacionEstandar(tAM, mTAM);
+    double sdTSS = desviacionEstandar(tSS, mTSS);*/
+    double sdTACO = desviacionEstandar(tACO, mTACO);
 
     // Mejora total (Heuristica vs ILS)
     //double mejora = (mCH > 0) ? ((mCH - mCILS) / mCH) * 100.0 : 0.0;*/
@@ -1186,9 +1540,13 @@ int main(int argc, char const *argv[])
            /*<< "| " << setw(11) << cGRASP //formatearMedida(mCGRASP, sdCGRASP)
            << "| " << setw(11) << formatearMedida(mTGRASP, sdTGRASP)
            << "| " << setw(11) << cAG //formatearMedida(mCAG, sdCAG)
-           << "| " << setw(11) << formatearMedida(mTAG, sdTAG)*/
+           << "| " << setw(11) << formatearMedida(mTAG, sdTAG)
            << "| " << setw(11) << cAM //formatearMedida(mCAM, sdCAM)
            << "| " << setw(11) << formatearMedida(mTAM, sdTAM)
+           << "| " << setw(11) << cSS //formatearMedida(mCSS, sdCSS)
+           << "| " << setw(11) << formatearMedida(mTSS, sdTSS)*/
+           << "| " << setw(11) << cACO //formatearMedida(mCACO, sdCACO)
+           << "| " << setw(11) << formatearMedida(mTACO, sdTACO)
            /*<< "| " << setw(5) << mejora << "%"*/ << endl;
     }
   }
