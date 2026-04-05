@@ -138,7 +138,7 @@ int main(int argc, char const *argv[])
         cout << " | " << setw(wC) << "Costo SS" << " | " << setw(wT) << "T. SS(s)";
     if (runACO)
         cout << " | " << setw(wC) << "Costo ACO" << " | " << setw(wT) << "T. ACO(s)";
-    if (runACO)
+    if (runCRO)
         cout << " | " << setw(wC) << "Costo CRO" << " | " << setw(wT) << "T. CRO(s)";
     cout << "\n"
          << string(lineLength, '-') << "\n";
@@ -336,7 +336,7 @@ int main(int argc, char const *argv[])
                 cout << " | " << setw(wC) << (int)round(promedio(cSS)) << " | " << setw(wT) << formatearMedida(promedio(tSS), desviacionEstandar(tSS, promedio(tSS)));
             if (runACO)
                 cout << " | " << setw(wC) << (int)round(promedio(cACO)) << " | " << setw(wT) << formatearMedida(promedio(tACO), desviacionEstandar(tACO, promedio(tACO)));
-            if (runACO)
+            if (runCRO)
                 cout << " | " << setw(wC) << (int)round(promedio(cCRO)) << " | " << setw(wT) << formatearMedida(promedio(tCRO), desviacionEstandar(tCRO, promedio(tCRO)));
             cout << "\n";
             cout.flush();

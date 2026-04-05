@@ -19,17 +19,17 @@ void Formula::optimizacionReaccionQuimica(vector<TBool> &varsGlobal, int popSize
     auto tiempoInicio = chrono::high_resolution_clock::now();
 
     // Parámetros termodinámicos de CRO
-    double KE_inicial = 1000.0;   
-    double bufferEnergia = 0.0;   
-    double KELossRate = 0.2;      
-    double moleCollRatio = 0.2;   
-    int maxHits = 10;             
+    double KE_inicial = 1000.0;
+    double bufferEnergia = 0.0;
+    double KELossRate = 0.2;
+    double moleCollRatio = 0.2;
+    int maxHits = 10;
 
     // Inicializar población
     vector<Molecula> poblacion;
     poblacion.reserve(popSizeInicial * 2); // Pre-reservar memoria para evitar reasignaciones
     uniform_int_distribution<> disBool(0, 1);
-    
+
     int mejorPEGlobal = calcularCosto(varsGlobal);
     vector<TBool> mejorSolucionGlobal = varsGlobal;
 
@@ -59,7 +59,7 @@ void Formula::optimizacionReaccionQuimica(vector<TBool> &varsGlobal, int popSize
     while (true)
     {
         // Control Termodinámico del tiempo (Solo consultamos al SO cada 100 iteraciones)
-        if (iteraciones++ % 10000 == 0) {
+        if (iteraciones++ % 100 == 0) {
             auto tiempoActual = chrono::high_resolution_clock::now();
             chrono::duration<double> tiempoTranscurrido = tiempoActual - tiempoInicio;
             if (tiempoTranscurrido.count() > tiempoLimite) break;
