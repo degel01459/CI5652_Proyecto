@@ -308,11 +308,16 @@ $$E_{inicial} \ge U_{final}$$
 
 Donde $E_{inicial} = U_{inicial} + K_{inicial} + buffer$ y $buffer$ es opcional
 ya que solamente actúa cuando no se cumple la condición mencionada. Además, si
-dicha regla falla, la reacción no puede ocurrir.
+dicha regla falla, la reacción no puede ocurrir. Asimismo, la energía se pierde
+por colisión con una tasa $q$ y la energía que pasa al búfer es $q \times K$ en
+caso de colisión inefectiva y $q \times (E_{inicial} - U_{final})$ siempre que
+una reacción ocurra.
 
 Para los efectos de este estudio, se determinó que las condiciones que otorgaban
 la mejor calidad de resultados eran con un tiempo límite de dos segundos, límite
-de colisiones inefectivas de veinte y energía cinética inicial de 100
+de colisiones inefectivas de diez y energía cinética inicial de mil y pérdida de
+energía por colisión de veinte por ciento. También se mantuvo con una colección
+de veinte moléculas.
 
 ## Resultados de corridas
 
@@ -360,6 +365,12 @@ la solución no es globalmente óptima, la diferencia en tiempo para obtenerlas
 plantea una ventana de oportunidad para estos algoritmos siempre y cuando no sea
 imprescindible una solución exacta del problema.
 
+Con la metaheurística seleccionada, puede observarse que no mejora la calidad de
+la solución heurística y esto pudiera deberse, como en el caso de sus homólogas
+que al tomar como parte de las soluciones a la entregada por la heurística
+constructiva voraz, la metaheurística no parece encontrar mejores soluciones en
+las adyacencias de la solución heurística dentro del espacio de búsqueda.
+
 **Tabla 3. Tiempo de ejecución por algoritmo**
 
 | Archivo | Casos | Exacto     | Heurística | B. L.     | B. L. I. | B. T.  | R. S.    | GRASP  | A. G.  | A. M.   | B. D. | C. H.    | O. R. Q.   |
@@ -385,6 +396,10 @@ parámetros a controlar para cada uno, sumado a la necesidad estadística de ten
 réplicas, plantea un cuello de botella ineludible en la cantidad de pruebas que
 se pueden realizar frente a los tiempos de entrega de los distintos avances.
 
+Debido a los resultados de calidad de la solución, se probó con tiempos límites
+de dos y sesenta segundos lo que no resultó en mejoras para la solución
+heurística así que se reportaron los valores con dos segundos.
+
 ## Conclusiones
 
 Las soluciones encontradas por las heurísticas y metaheurísitcas planteadas, a
@@ -394,6 +409,11 @@ la solución, compiten muy bien términos de rendimiento temporal.
 Se requieren más ensayos de tiempos de ejecución de estos experimentos para
 encontrar las condiciones que generen el mejor balance entre tiempo de ejecución
 y la calidad de las soluciones.
+
+Para el problema de optimización SAT, la metaheurística que entregó la mejor
+calidad de soluciones fue el algoritmo memético y las que no mejoraron a la
+solución voraz constructiva fueron recocido simulado y optimización de
+reacciones químicas.
 
 ## Referencias
 
