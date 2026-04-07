@@ -1,10 +1,10 @@
 ---
 lang: es-ES
 header-includes:
-  - \renewcommand{\tablename}{Tabla}
+   - \renewcommand{\tablename}{Tabla}
 ---
 
-# Informe 3
+# Informe 4
 
 Elaborado por:
 
@@ -12,10 +12,9 @@ Alejandro Zambrano (17-10684), Ángel Rodríguez (15-11669),
 Francisco Márquez (12-11163), Kevin Briceño (15-11661), Sergio Carrillo
 (14-11315).
 
-Fecha:
+Fecha: 07/04/2026
 
 ## Resumen
-
 El problema de satisficibilidad booleana (SAT) es el problema de saber si una
 fórmula en forma normal conjuntiva tiene una asignación de variables que la haga
 verdadera. El problema MaxSAT es la versión de optimización donde, la fórmula
@@ -172,7 +171,6 @@ solución candidata es mejor que lo que se tiene, se toma sin miramientos. Si no
 la probabilidad de tomarla varía con la temperatura \[14\].
 
 ## GRASP: la lista restringida de mejores candidatos
-
 La función de costo consiste en seleccionar el máximo entre la cantidad de veces
 que una variable está negada o no (del mismo modo que en la solución heurística
 propuesta previamente). El umbral para entrar en la lista restringida de mejores
@@ -198,12 +196,128 @@ generación. El operador de cruce es un cruce uniforme, es decir, para cada una
 de las n variables se escoge con igual probabilidad al padre A o al B y así se
 construye una nueva solución que no es demasiado parecida a ninguno de los dos
 padres. Luego, si hay n variables, la probabilidad de que una variable mute
-(invierta su valor) es 1/n. Se probó con 50 individuos y 100 generaciones.
+(invierta su valor) es 1/n \[18\]. Se probó con cincuenta individuos y cien
+generaciones.
+
+## Algoritmo memético
+
+Dado que el algoritmo memético es un algoritmo genético con algún proceso de
+mejora de los descendientes, se modificó el algoritmo genético para que las
+soluciones hija realizaran una búsqueda local manteniendo el cruce \[19, 20\] y
+la mutación \[18\] y cambiando la selección a un torneo de dos candidatos, así,
+se evita la convergencia temprana a óptimos locales y se permite la exploración
+de otras regiones del espacio de búsqueda \[19\]. Se probó con veinte individuos
+\[21, 22\] y las generaciones fueron dinámicas (por tiempo de ejecución y
+veinticinco generaciones sin mejora).
+
+## Búsqueda dispersa y reenlazado de caminos
+
+Para la búsqueda dispersa se usó un conjunto de referencia de diez soluciones
+con cinco soluciones prometedoras (bajo costo) y cinco soluciones diversas (más
+distancia de Hamming) \[23, 24\]. Para el reenlazado de caminos se implementó un
+reenlazado bidireccional \[25\] truncado con mejora local \[26, 27\]. Dado que
+la topología de la vecindad para MAXSAT es asimétrica, el reenlazado de caminos
+bidireccional permite explorar regiones distintas a partir de las mismas
+soluciones guía. Por su parte el truncado con mejora local intensifica sobre la
+mejor solución intermedia vista hasta el momento.
+
+## Optimización de colonia de hormigas
+
+Se implementó una optimización de colonia de hormigas híbrida donde cada hormiga
+realiza una búsqueda local sobre las soluciones que encuentra y se usaron diez
+hormigas para esto \[28\]. El peso de las feromonas fue 1,0 para garantizar una
+influencia lineal sobre las decisiones que toma cada hormiga \[29, 30\]. El peso
+de la heurística fue 2,0 para una influencia cuadrática sobre las decisiones, lo
+que implica que una hormiga debe considerar más la calidad de las soluciones que
+la memoria de lo que ya se ha visto \[29, 30\]. Está demostrado que, con estas
+condiciones, se obtienen resultados competitivos \[31\].
+
+## Optimización de reacciones químicas
+
+Como metaheurística propia se escogió, por motivos de tiempo y evitar
+redundancia con la literatura, la optimización de reacciones químicas \[32\]. En
+las siguientes líneas se explicará brevemente la inspiración y elementos de la
+metaheurística así como los operadores involucrados en la misma.
+
+### Inspiración
+
+Las reacciones químicas ocurren porque las moléculas que en ellas participan
+_perciben_ que existe un estado en el cual su estabilidad es mayor. Se puede
+decir que cada molécula nota este cambio por su energía potencial (U). La
+energía potencial es, _a grosso modo_, la cuantificación de los efectos
+internos de la molécula (tensiones estéricas y electrónicas) y básicamente, la
+estabilidad de una molécula es inversamente proporcional a U \[33, 34, 35\]. Se
+ha teorizado que las reacciones ocurren porque las moléculas chocan entre sí y
+cuando las colisiones son efectivas, la transformación ocurre (teoría cinético
+molecular, TCM) \[33, 34, 35\]. La metaheurística parte del postulado de la TCM
+de las colisiones y se enfoca en las siguientes reacciones (la explicación a
+detalle de cada tipo de reacción en la naturaleza escapa del alcance de este
+informe):
+
+1. Síntesis (colisiones efectivas entre dos moléculas): por ejemplo (en el
+sentido químico) la reacción entre los protones y los aniones hidróxido para
+formar agua (aunque más correctamente son los iones hidronio porque no es
+posible aislar protones sino hidronio, justamente, por efectos electrónicos)
+y en general, reacciones bimoleculares. Existen reacciones trimoleculares, pero
+son muy poco comunes por la baja probabilidad de que tres moléculas colisionen
+al mismo tiempo y la colisión sea efectiva. Un ejemplo es la combinación de dos
+moléculas de óxido nítrico (NO) con cloro gaseoso para formar dos moléculas de
+cloruro de nitrosilo.
+
+2. Descomposición: reacciones que ocurren con moléculas con alta energía (U) y
+que dan como resultado al menos dos moléculas más pequeñas, por ejemplo, la
+reacción química como la dismutación del agua oxígenada en agua y oxígeno debido
+a la elevada inestabilidad del enlace O-O del peróxido que no deja de ocurrir
+espontáneamente a ninguna temperatura. También, las descomposiciones pueden
+ocurrir por efecto del entorno sobre moléculas que son suficientemente estables
+para no descomponerse espontáneamente, por ejemplo, dejar bromo líquido a la luz
+hará que desaparezca su color rojo característico por la disociación del bromo
+molecular en dos radicales bromo. Este es un efecto que también lo puede
+proporcionar la temperatura (que es la manera directa de hablar de energía
+cinética, K).
+
+3. Colisiones _inefectivas_: son colisiones que no tienen la energía necesaria
+para inducir una reacción química (convertir una molécula A en una B totalmente
+diferente), pero sí pueden inducir otros cambios. En la naturaleza esto puede
+ilustrarse con el tautomerismo ceto-enol que puede exibir la acetona que es,
+básicamente, cambiar de posición algunos enlaces químicos.
+
+Todos estos cambios ocurren porque, "para la molécula", el estado de los
+productos es más estable que el estado de los reactivos porque se minimiza su
+energía interna.
+
+### Operadores y estructuras de la metaheurística.
+
+La metaheurística modela los efectos naturales definidos previamente con un
+búfer de energía (el entorno), cuya función es la de almacenar energía que se
+libera de una reacción luego de que ocurre, o entregarle energía a una reacción
+para que ocurra. Las soluciones factibles de los problemas de optimización son
+las moléculas. Estas tienen atributos como la estructura de la solución que es
+altamente dependiente del problema y en el caso de MaxSAT es el arreglo de bits
+planteado desde el comienzo y la energía cinética (K) que tiene la molécula, es
+decir, una medida de su temperatura (en el mismo sentido que en recocido
+simulado) y también puede tener su energía potencial (que es el valor de la
+función de evaluación) y los algoritmos de síntesis, descomposición y colisiones
+inefectivas. Asimismo, cada molécula tiene un contador de colisiones inefectivas
+que ha sufrido y que sirven como un nivel de energía interna que, cuando se
+sobrepasa, la molécula solamente puede sufrir una reacción de descomposición.
+
+La forma de saber si una reacción química ocurre, o no, es con la regla:
+
+$$E_{inicial} \ge U_{final}$$
+
+Donde $E_{inicial} = U_{inicial} + K_{inicial} + buffer$ y $buffer$ es opcional
+ya que solamente actúa cuando no se cumple la condición mencionada. Además, si
+dicha regla falla, la reacción no puede ocurrir.
+
+Para los efectos de este estudio, se determinó que las condiciones que otorgaban
+la mejor calidad de resultados eran con un tiempo límite de dos segundos, límite
+de colisiones inefectivas de veinte y energía cinética inicial de 100
 
 ## Resultados de corridas
 
 En la tabla 2 se muestran los resultados en número de cláusulas insatisfechas
-promedio de dos ejecuciones de cada archivo del _benchmark_. El número entre
+promedio de treinta ejecuciones de cada archivo del _benchmark_. El número entre
 paréntesis corresponde a la desviación estándar sobre la última cifra
 significativa. Si no tiene número entre paréntesis es porque la calidad de la
 solución no varío con las repeticiones. Los valores vacíos son resultados que no
@@ -212,23 +326,23 @@ del algoritmo frente a la instancia. \vspace{5cm}
 
 **Tabla 2. Calidad de las soluciones por algoritmo**
 
-| Archivo | Casos | Exacto | Heurística | B. L. | B. L. I. | B. T. | R. S. | GRASP |   A. G.   |
-| :-----: | :---: | :----: | :--------: | :---: | :------: | :---: | :---: | :---: | :-------: |
-|  n5 i2  |  500  |   5    |    1952    |  222  |  191(1)  | 1512  | 1952  |  185  |  1887(3)  |
-|  n5 i4  |  500  |   4    |    1949    |  219  |  184(4)  | 1509  | 1949  |  181  |  1914(4)  |
-|  n5 i5  |  10k  |   5    |    1953    |  223  | 1,8(1)e2 | 1513  | 1953  |  193  | 1,84(6)e3 |
-|  n5 i7  |  1k   |   10   |    1972    |  242  | 2,1(1)e2 | 1532  | 1972  |  192  |  1948(4)  |
-|  n5 i8  |  10k  |   5    |    1977    |  247  |  217(4)  | 1537  | 1977  |  203  |  1946(8)  |
-|  n6 i1  |  500  |        |    7672    |  623  |  575(9)  | 6402  | 7672  |       |  7647(3)  |
-|  n6 i4  |  500  |        |     56     |  53   |  53(1)   |  51   |  56   |  53   |   56(1)   |
-|  n6 i5  |  10k  |   4    |    7648    |  599  |  555(1)  | 6378  | 7648  |       |  7552(2)  |
-|  n6 i7  |  1k   |   8    |    155     |  152  |   151    |  150  |  155  |  152  |    154    |
-|  n6 i8  |  1k   |   8    |    144     |  141  |  140(1)  |  139  |  144  |  141  |    144    |
-|  n6 i9  |  10k  |        |     69     |  66   |  65(1)   |  64   |  69   |  66   |   69(1)   |
-|  n6 i9  |  1k   |        |     69     |  66   |    65    |  64   |  69   |  66   |    69     |
-|  n7 i8  |  10k  |   20   |    378     |  372  |  372(1)  |  370  |  378  |  372  |    378    |
-|  n7 i8  |  1k   |   20   |    378     |  372  |  371(1)  |  370  |  378  |  372  |  378(1)   |
-|  n7 i9  |  500  |        |    220     |  214  |  214(1)  |  212  |  220  |  214  |    220    |
+| Archivo | Casos | Exacto | Heurística | B. L. | B. L. I. | B. T. | R. S. | GRASP | A. G.  | A. M. | B. D. | C. H. | O. R. Q. |
+|:-------:|:-----:|:------:|:----------:|:-----:|:--------:|:-----:|:-----:|:-----:|:------:|:-----:|:-----:|:-----:|:--------:|
+|  n5 i2  |  500  | 5      | 1952       | 223   | 195      | 1512  | 1952  | 185   | 1905   | 37    | 222   | 141   | 1952     |
+|  n5 i4  |  500  | 4      | 1949       | 219   | 186      | 1509  | 1949  | 181   | 1887   | 40    | 219   | 126   | 1949     |
+|  n5 i5  |  10k  | 5      | 1953       | 222   | 182      | 1513  | 1953  | 193   | 1908   | 37    | 223   | 131   | 1953     |
+|  n5 i7  |  1k   | 10     | 1972       | 242   | 208      | 1532  | 1972  | 192   | 1923   | 60    | 242   | 158   | 1972     |
+|  n5 i8  |  10k  | 5      | 1977       | 53    | 52       | 1537  | 1977  | 203   | 1923   | 69    | 247   | 154   | 1977     |
+|  n6 i1  |  500  | 86     | 7672       | 623   | 544      | 6402  | 7672  | 533   | 7652   | 363   | 623   | 431   | 7672     |
+|  n6 i4  |  500  | 200    | 56         | 152   | 150      | 51    | 56    | 53    | 56     | 49    | 53    | 51    | 56       |
+|  n6 i5  |  10k  | 222    | 7648       | 599   | 538      | 6378  | 7648  | 509   | 7618   | 149   | 599   | 443   | 7648     |
+|  n6 i7  |  1k   | 8      | 155        | 141   | 140      | 150   | 155   | 152   | 154    | 461   | 152   | 151   | 155      |
+|  n6 i8  |  1k   | 8      | 144        | 66    | 65       | 139   | 144   | 141   | 144    | 139   | 141   | 139   | 144      |
+|  n6 i9  |  10k  | 187    | 69         | 247   | 207      | 64    | 69    | 66    | 68     | 63    | 66    | 64    | 69       |
+|  n6 i9  |  1k   | 187    | 69         | 66    | 64       | 64    | 69    | 66    | 69     | 63    | 66    | 64    | 69       |
+|  n7 i8  |  10k  | 20     | 378        | 372   | 374      | 370   | 378   | 372   | 378    | 370   | 372   | 370   | 378      |
+|  n7 i8  |  1k   | 20     | 378        | 372   | 373      | 370   | 378   | 372   | 378    | 368   | 372   | 370   | 378      |
+|  n7 i9  |  500  | 474    | 220        | 214   | 216      | 212   | 220   | 214   | 220    | 211   | 214   | 212   | 220      |
 
 En la tabla 3 se puede observar el tiempo en segundos que le tomó a cada
 algortimo con cada instancia del _benchmark_. El número entre paréntesis es la
@@ -248,23 +362,23 @@ imprescindible una solución exacta del problema.
 
 **Tabla 3. Tiempo de ejecución por algoritmo**
 
-| Archivo | Casos | Exacto  | Heurística |  B. L.   | B. L. I. | B. T.  |   R. S.    |  GRASP  |  A. G.  |
-| :-----: | :---: | :-----: | :--------: | :------: | :------: | :----: | :--------: | :-----: | :-----: |
-|  n5 i2  |  500  | 851.576 |    6(4)    |  10(3)   |  5(1)e2  |  2(1)  |  0.007(2)  | 980(8)  |  17(1)  |
-|  n5 i4  |  500  | 903.575 |    6(4)    |  11(3)   |  5(1)e2  | 1.5(5) |  0.006(1)  | 1000(1) |  17(3)  |
-|  n5 i5  |  10k  | 1140.65 |    6(4)    |   9(3)   |  5(2)e2  | 1.7(5) | 0.00796(3) | 1000(1) | 15.8(5) |
-|  n5 i7  |  1k   | 1941.66 |    6(4)    |  10(3)   |  5(1)e2  | 1.5(5) |  0.006(1)  | 900(1)  |  17(2)  |
-|  n5 i8  |  10k  | 143.131 |    6(4)    |  10(3)   |  4(1)e2  | 1.4(4) | 0.0051(5)  | 1020(6) |  17(2)  |
-|  n6 i1  |  500  |         |   2(1)e2   | 2,6(9)e2 |  7(2)e3  |  4(1)  |  0.014(8)  |         | 6(1)e1  |
-|  n6 i4  |  500  |         |   0,2(1)   | 0,002(1) |  16(8)   | 0.3(1) |  0.003(2)  |  14(5)  | 2.5(9)  |
-|  n6 i5  |  10k  |         |   2(1)e2   | 2,7(9)e2 |  7(2)e3  |  4(2)  |  0.016(6)  |         | 6(2)e1  |
-|  n6 i7  |  1k   | 109.021 |   0,2(1)   | 0,003(2) |  2(1)e1  | 0.3(2) |  0.002(1)  |  14(5)  |  2(1)   |
-|  n6 i8  |  1k   | 109.691 |   0,2(1)   | 0,002(2) |  2(1)e1  | 0.3(1) | 0.0025(4)  |  14(4)  | 2.5(9)  |
-|  n6 i9  |  10k  |         |   0,2(1)   | 0,004(4) |  2(1)e1  | 0.3(1) |  0.002(1)  |  12(4)  |  3(1)   |
-|  n6 i9  |  1k   |         |   0,2(1)   | 0,003(2) |  2(1)e1  | 0.2(2) |  0.002(1)  |  14(5)  |  2(1)   |
-|  n7 i8  |  10k  | 253.064 |    3(2)    | 0,01(1)  |  3,1(3)  | 1.5(2) |  0.005(1)  | 400(2)  |  13(3)  |
-|  n7 i8  |  1k   | 260.345 |    3(2)    | 0,01(1)  |  2,6(2)  | 1.1(5) |  0.004(1)  | 400(2)  |  12(6)  |
-|  n7 i9  |  500  |         |    3(2)    | 0,02(2)  |  2,3(3)  | 1.1(5) |  0.003(1)  | 400(2)  |  10(5)  |
+| Archivo | Casos | Exacto     | Heurística | B. L.     | B. L. I. | B. T.  | R. S.    | GRASP  | A. G.  | A. M.   | B. D. | C. H.    | O. R. Q.   |
+|:-------:|:-----:|:----------:|:----------:|:---------:|:--------:|:------:|:--------:|:------:|:------:|:-------:|:-----:|:--------:|:----------:|
+|  n5 i2  |  500  | 9(2)e2     | 3,5(2)     | 0,04(2)   | 1,4(2)   | 1,4(2) | 0,008(1) | 500(1) | 27(3)  | 60,6(4) | 22(4) | 32(4)    | 2.00009(5) |
+|  n5 i4  |  500  | 9(2)e2     | 3,4(2)     | 0,04(2)   | 1,4(2)   | 1,5(3) | 0,009(2) | 500(1) | 29(2)  | 60,5(4) | 21(6) | 33(6)    | 2.00009(5) |
+|  n5 i5  |  10k  | 1.1(2)e3   | 3,4(2)     | 0,04(2)   | 1,5(3)   | 1,4(2) | 0,011(5) | 500(1) | 29(2)  | 60,6(3) | 22(5) | 34(4)    | 2.00008(6) |
+|  n5 i7  |  1k   | 1.5(3)e3   | 3,4(2)     | 0,05(1)   | 1,5(3)   | 1,5(1) | 0,009(2) | 510(9) | 27(1)  | 60,6(4) | 21(5) | 35(6)    | 2.00010(5) |
+|  n5 i8  |  10k  | 1.5(1)e2   | 3,4(2)     | 0,004(3)  | 0,3(1)   | 1,5(1) | 0,009(2) | 500(1) | 27(2)  | 60,8(5) | 23(6) | 32(5)    | 2.00009(6) |
+|  n6 i1  |  500  | 1800.8(3)  | 113,634161 | 0,2(3)    | 4,2(9)   | 7(3)   | 0,013(6) | 10879  | 80(3)  | 65(4)   | 59(5) | 60,12(9) | 2.0009(1)  |
+|  n6 i4  |  500  | 1800.10(4) | 0,17(1)    | 0,006(4)  | 0,3(1)   | 0,4(1) | 0,003(1) | 10(1)  | 3,3(8) | 16(1)   | 6(2)  | 3,7(5)   | 2.00004(2) |
+|  n6 i5  |  10k  | 7(3)e2     | 113,786560 | 0,1(1)    | 3,5(5)   | 7(2)   | 0,011(3) | 10977  | 80(3)  | 16(2)   | 58(4) | 60,11(5) | 2.0010(1)  |
+|  n6 i7  |  1k   | 119(2)     | 0,17(2)    | 0,006(4)  | 0,34(9)  | 0,5(1) | 0,004(1) | 10(1)  | 3,5(7) | 65(4)   | 7(2)  | 4,9(7)   | 2.00004(3) |
+|  n6 i8  |  1k   | 104(1)     | 0,16(1)    | 0,006(3)  | 0,32(8)  | 0,5(1) | 0,004(1) | 10(1)  | 3,5(7) | 16(2)   | 6(2)  | 4,5(6)   | 2.00005(3) |
+|  n6 i9  |  10k  | 1.8(1)e3   | 0,17(2)    | 0,04(2)   | 1,3(3)   | 0,4(2) | 0,003(1) | 10(2)  | 3,5(7) | 17(3)   | 6(2)  | 3,9(7)   | 2.00005(2) |
+|  n6 i9  |  1k   | 1800.12(8) | 0,17(1)    | 0,004(2)  | 0,29(9)  | 0,4(1) | 0,004(1) | 10(1)  | 3,5(8) | 17(2)   | 6(3)  | 4,1(7)   | 2.00005(2) |
+|  n7 i8  |  10k  | 2.7(2)e2   | 1,54(7)    | 0,02(1)   | 1,1(2)   | 1,5(2) | 0,008(3) | 170(2) | 21(2)  | 58(3)   | 21(4) | 23(3)    | 2.00008(6) |
+|  n7 i8  |  1k   | 263(7)     | 1,6(1)     | 0,02(1)   | 1,1(2)   | 1,6(2) | 0,008(2) | 170(3) | 22(2)  | 57(5)   | 21(5) | 22(3)    | 2.00007(4) |
+|  n7 i9  |  500  | 1800.2(2)  | 1,57(9)    | 0,0120(7) | 0,69(2)  | 1,6(2) | 0,007(2) | 180(3) | 21(2)  | 50(5)   | 20(6) | 19(3)    | 2.00008(5) |
 
 Asimismo, el incremento en la cantidad de algoritmos implementados y los
 parámetros a controlar para cada uno, sumado a la necesidad estadística de tener
@@ -277,9 +391,9 @@ Las soluciones encontradas por las heurísticas y metaheurísitcas planteadas, a
 pesar de no competir frente a un solucionador exacto en términos de calidad de
 la solución, compiten muy bien términos de rendimiento temporal.
 
-Se requieren muchas más ejecuciones y ensayos de parámetros para encontrar un
-conjunto de estos que genere el mejor balance entre tiempo de ejecución y la
-calidad de la solución.
+Se requieren más ensayos de tiempos de ejecución de estos experimentos para
+encontrar las condiciones que generen el mejor balance entre tiempo de ejecución
+y la calidad de las soluciones.
 
 ## Referencias
 
@@ -310,9 +424,9 @@ Paracooba, Plingeling and Treengeling Entering the SAT Competition 2020_.
 \[8\] A. Morgado, C. Dodaro, and J. Marques-Silva, _Core-guided MaxSAT with soft
 cardinality constraints_.
 
-\[9\] Silva, J. M., & Sakallah, K. A. (1996, November). _GRASP-a new search
-algorithm for satisfiability_. In Proceedings of International Conference on
-Computer Aided Design (pp. 220-227). IEEE.
+\[9\] Silva, J. M., & Sakallah, K. A. (1996). _GRASP-a new search algorithm for
+satisfiability_. In Proceedings of International Conference on Computer Aided
+Design (pp. 220-227). IEEE.
 
 \[10\] Liang, J. H., Ganesh, V., Poupart, P., & Czarnecki, K. (2016, June).
 _Learning rate based branching heuristic for SAT solvers_. In International
@@ -336,9 +450,88 @@ partitioning_. Operations research, 37(6), 865-892.
 \[15\] Feo, T. A., & Resende, M. G. (1995). _Greedy randomized adaptive search
 procedures_. Journal of global optimization, 6(2), 109-133.
 
-\[16\] Bäck, T. (1993, June). _Optimal mutation rates in genetic search_. In
+\[16\] Bäck, T. (1993). _Optimal mutation rates in genetic search_. In
 Proceedings of the 5th international conference on genetic algorithms (pp. 2-8).
 
-\[17\] Rana, S., & Whitley, D. (1998, September). _Genetic algorithm behavior in
+\[17\] Rana, S., & Whitley, D. (1998). _Genetic algorithm behavior in
 the MAXSAT domain_. In International Conference on Parallel Problem Solving from
 Nature (pp. 785-794). Berlin, Heidelberg: Springer Berlin Heidelberg.
+
+\[18\] Bäck, T. (1993). _Optimal mutation rates in genetic search_. In
+Proceedings of the 5th international conference on genetic algorithms (pp. 2-8).
+
+\[19\] Gottlieb, J., Marchiori, E., & Rossi, C. (2002). _Evolutionary algorithms
+for the satisfiability problem_. Evolutionary computation, 10(1), 35-50.
+
+\[20\] Eiben, A. E., van Kemenade, C. H., & Kok, J. N. (1995, June). _Orgy in
+the computer: Multi-parent reproduction in genetic algorithms_. In European
+conference on artificial life (pp. 934-945). Berlin, Heidelberg: Springer Berlin
+Heidelberg.
+
+\[21\] Goldberg, D. E., & Deb, K. (1991). _A comparative analysis of selection
+schemes used in genetic algorithms_. In Foundations of genetic algorithms (Vol.
+1, pp. 69-93). Elsevier.
+
+\[22\] Moscato, P. (1989). _On evolution, search, optimization, genetic
+algorithms and martial arts: Towards memetic algorithms_. Caltech concurrent
+computation program, C3P Report, 826(1989), 37.
+
+\[23\] Neri, F., Cotta, C., & Moscato, P. (Eds.). (2011). _Handbook of memetic
+algorithms_. Springer.
+
+\[24\] Rego, C. (2006). _Scatter Search: Methodology and Implementations in C_.
+
+\[25\] Glover, F., Laguna, M., & Martí, R. (2000). _Fundamentals of scatter
+search and path relinking_. Control and cybernetics, 29(3), 653-684.
+
+\[26\] Resendel, M. G., & Ribeiro, C. C. (2005). _GRASP with path-relinking:
+Recent advances and applications_. Metaheuristics: progress as real problem
+solvers, 29-63.
+
+\[27\] Glover, F. (1997). _A template for scatter search and path relinking_.
+In European conference on artificial evolution (pp. 13-54). Berlin, Heidelberg:
+Springer Berlin Heidelberg.
+
+\[28\] Resende, M. G., & Ribeiro, C. C. (2013). _GRASP: Greedy randomized
+adaptive search procedures_. In Search methodologies: introductory tutorials in
+optimization and decision support techniques (pp. 287-312). Boston, MA: Springer
+US.
+
+\[29\] Stützle, T., & Hoos, H. H. (2000). _MAX–MIN ant system_. Future
+generation computer systems, 16(8), 889-914.
+
+\[30\] Dorigo, M. (2007). _Ant colony optimization_. Scholarpedia, 2(3), 1461.
+
+\[31\] Dorigo, M., Maniezzo, V., & Colorni, A. (1996). _Ant system: optimization
+by a colony of cooperating agents_. IEEE transactions on systems, man, and
+cybernetics, part b (cybernetics), 26(1), 29-41.
+
+\[32\] A. Y. S. Lam and V. O. K. Li, _Chemical-reaction-inspired metaheuristic
+for optimization_ IEEE Trans. Evol. Comput., vol. 14, no. 3, pp. 381–399, Jun.
+2010.
+
+\[33\] P. Atkins and J. de Paula, _Physical Chemistry_, 10th ed. Oxford, U.K.:
+Oxford Univ. Press, 2014.
+
+\[34\] G. W. Castellan, _Physical Chemistry_, 3rd ed. Reading, MA, USA:
+Addison-Wesley, 1983.
+
+\[35\] I. N. Levine, _Physical Chemistry_, 6th ed. New York, NY, USA:
+McGraw-Hill, 2008.
+
+<!--
+  Mutación 1/N:
+    
+  2-Torneo:
+    
+  Pobación pequeña:
+    
+    
+  RefSet:
+    
+    
+  Hormigas:
+    
+    
+
+-->
